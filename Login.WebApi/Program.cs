@@ -1,4 +1,5 @@
-﻿using Login.Infrastructure.Model;
+﻿using Login.Infrastructure.Data.Identity;
+using Login.Infrastructure.Model;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -87,7 +88,7 @@ builder.Services
     {
         options.User.RequireUniqueEmail = true;
     })
-    .AddRoles<IdentityRole>()
+    .AddRoles<AppRole>()
     .AddEntityFrameworkStores<DataContext>()
     .AddSignInManager()
     .AddDefaultTokenProviders();
@@ -114,7 +115,7 @@ app.MapControllers();
 
 using (var scope = app.Services.CreateScope())
 {
-    var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+    var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<AppRole>>();
     var userManager = scope.ServiceProvider.GetRequiredService<UserManager<IdentityUser>>();
 
     // ----- ROLES -----
@@ -124,7 +125,13 @@ using (var scope = app.Services.CreateScope())
     {
         if (!await roleManager.RoleExistsAsync(role))
         {
-            await roleManager.CreateAsync(new IdentityRole(role));
+            await roleManager.CreateAsync(new AppRole
+            {
+                Name = role,
+                Description = role == "r-admin" ? "Administrador del sistema" : "Usuario estándar",
+                Active = true,
+                CreatedAt = DateTime.UtcNow
+            });
         }
     }
 
