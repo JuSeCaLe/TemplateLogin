@@ -5,7 +5,7 @@
     using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
     using Microsoft.EntityFrameworkCore;
 
-    public class DataContext : IdentityDbContext<IdentityUser, AppRole, string>
+    public class DataContext : IdentityDbContext<AppUser, AppRole, string>
     {
         public DataContext(DbContextOptions<DataContext> options) : base(options)
         {            
@@ -15,12 +15,17 @@
         {
             base.OnModelCreating(builder);
 
-            // Opcional: config extra (por ejemplo longitud)
             builder.Entity<AppRole>(b =>
             {
                 b.Property(r => r.Description).HasMaxLength(250);
                 b.Property(r => r.Active).HasDefaultValue(true);
                 b.Property(r => r.CreatedAt).HasDefaultValueSql("NOW()");
+            });
+
+            builder.Entity<AppUser>(b =>
+            {
+                b.Property(u => u.Active).HasDefaultValue(true);
+                b.Property(u => u.CreatedAt).HasDefaultValueSql("NOW()");
             });
         }
     }

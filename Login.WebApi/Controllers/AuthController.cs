@@ -1,6 +1,7 @@
 ﻿using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using Login.Infrastructure.Data.Identity;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -13,13 +14,13 @@ namespace Login.WebApi.Controllers
     [Route("api/[controller]")]
     public class AuthController : ControllerBase
     {
-        private readonly UserManager<IdentityUser> _userManager;
-        private readonly SignInManager<IdentityUser> _signInManager;
+        private readonly UserManager<AppUser> _userManager;
+        private readonly SignInManager<AppUser> _signInManager;
         private readonly IConfiguration _config;
 
         public AuthController(
-            UserManager<IdentityUser> userManager,
-            SignInManager<IdentityUser> signInManager,
+            UserManager<AppUser> userManager,
+            SignInManager<AppUser> signInManager,
             IConfiguration config)
         {
             _userManager = userManager;
@@ -36,6 +37,7 @@ namespace Login.WebApi.Controllers
         {
             var user = await _userManager.FindByEmailAsync(req.Email);
             if (user is null) return Unauthorized(new { message = "Credenciales inválidas" });
+            if (!user.Active) return Unauthorized(new { message = "Usuario inactivo" });
 
             var passwordOk = await _signInManager.CheckPasswordSignInAsync(user, req.Password, lockoutOnFailure: true);
             if (!passwordOk.Succeeded) return Unauthorized(new { message = "Credenciales inválidas" });

@@ -84,7 +84,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).
     });
 builder.Services.AddAuthorization();
 builder.Services
-    .AddIdentityCore<IdentityUser>(options =>
+    .AddIdentityCore<AppUser>(options =>
     {
         options.User.RequireUniqueEmail = true;
     })
@@ -104,9 +104,6 @@ if (app.Environment.IsDevelopment())
 }
 app.UseRouting();
 app.UseCors();
-
-//app.MapIdentityApi<IdentityUser>();
-
 app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
@@ -116,7 +113,7 @@ app.MapControllers();
 using (var scope = app.Services.CreateScope())
 {
     var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<AppRole>>();
-    var userManager = scope.ServiceProvider.GetRequiredService<UserManager<IdentityUser>>();
+    var userManager = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
 
     // ----- ROLES -----
     string[] roles = ["r-admin", "r-user"];
@@ -138,15 +135,21 @@ using (var scope = app.Services.CreateScope())
     // ----- USUARIO ADMIN -----
     var adminEmail = "admin@abogapp.com";
     var adminPassword = "Admin123!";
+    var adminFirstName = "admin";
+    var adminLastName = "abogapp";
 
     var adminUser = await userManager.FindByEmailAsync(adminEmail);
     if (adminUser == null)
     {
-        adminUser = new IdentityUser
+        adminUser = new AppUser
         {
             UserName = adminEmail,
             Email = adminEmail,
-            EmailConfirmed = true
+            FirstName = adminFirstName,
+            LastName = adminLastName,
+            EmailConfirmed = true,
+            Active = true,
+            CreatedAt = DateTime.UtcNow
         };
 
         var result = await userManager.CreateAsync(adminUser, adminPassword);
@@ -159,15 +162,21 @@ using (var scope = app.Services.CreateScope())
     // ----- USUARIO NORMAL -----
     var userEmail = "user@abogapp.com";
     var userPassword = "User123!";
+    var userFirstName = "user";
+    var userLastName = "abogapp";
 
     var normalUser = await userManager.FindByEmailAsync(userEmail);
     if (normalUser == null)
     {
-        normalUser = new IdentityUser
+        normalUser = new AppUser
         {
             UserName = userEmail,
             Email = userEmail,
-            EmailConfirmed = true
+            FirstName = userFirstName,
+            LastName = userLastName,
+            EmailConfirmed = true,
+            Active = true,
+            CreatedAt = DateTime.UtcNow
         };
 
         var result = await userManager.CreateAsync(normalUser, userPassword);
