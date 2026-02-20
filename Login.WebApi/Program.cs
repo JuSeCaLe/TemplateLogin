@@ -1,5 +1,6 @@
 ﻿using Login.Infrastructure.Data.Identity;
 using Login.Infrastructure.Model;
+using Login.Infrastructure.Model.Parametros;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -114,6 +115,7 @@ using (var scope = app.Services.CreateScope())
 {
     var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<AppRole>>();
     var userManager = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
+    var db = scope.ServiceProvider.GetRequiredService<DataContext>();
 
     // ----- ROLES -----
     string[] roles = ["r-admin", "r-user"];
@@ -185,6 +187,61 @@ using (var scope = app.Services.CreateScope())
             await userManager.AddToRoleAsync(normalUser, "r-user");
         }
     }
+
+    // ---- TIPO OBLIGACIÓN ----
+    string[] obligationTypes =
+    [
+        "PAGARE",
+        "CONTRATO",
+        "LETRA"
+    ];
+
+    foreach (var name in obligationTypes)
+    {
+        var exists = await db.TiposObligacion
+            .AnyAsync(x => x.Name.ToLower() == name.ToLower());
+
+        if (!exists)
+        {
+            db.TiposObligacion.Add(new TipoObligacion
+            {
+                Name = name,
+                Description = name,
+                Active = true,
+                CreatedAt = DateTime.UtcNow
+            });
+        }
+    }
+
+    // ---- TIPO PROCESO ----
+    string[] processTypes =
+    [
+        "EJECUTIVO SINGULAR",
+        "EJECUTIVO HIPOTECARIO",
+        "MIXTO",
+        "PRENDARIO",
+        "RESTITUCIÓN",
+        "LEASING"
+    ];
+
+    foreach (var name in processTypes)
+    {
+        var exists = await db.TiposProceso
+            .AnyAsync(x => x.Name.ToLower() == name.ToLower());
+
+        if (!exists)
+        {
+            db.TiposProceso.Add(new TipoProceso
+            {
+                Name = name,
+                Description = name,
+                Active = true,
+                CreatedAt = DateTime.UtcNow
+            });
+        }
+    }
+
+    await db.SaveChangesAsync();
 }
 
 app.Run();

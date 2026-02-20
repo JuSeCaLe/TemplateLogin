@@ -1,6 +1,7 @@
 ﻿namespace Login.Infrastructure.Model
 {
     using Login.Infrastructure.Data.Identity;
+    using Login.Infrastructure.Model.Parametros;
     using Microsoft.AspNetCore.Identity;
     using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
     using Microsoft.EntityFrameworkCore;
@@ -10,6 +11,9 @@
         public DataContext(DbContextOptions<DataContext> options) : base(options)
         {            
         }
+
+        public DbSet<TipoObligacion> TiposObligacion => Set<TipoObligacion>();
+        public DbSet<TipoProceso> TiposProceso => Set<TipoProceso>();
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -26,6 +30,26 @@
             {
                 b.Property(u => u.Active).HasDefaultValue(true);
                 b.Property(u => u.CreatedAt).HasDefaultValueSql("NOW()");
+            });
+
+            builder.Entity<TipoObligacion>(b =>
+            {
+                b.ToTable("TipoObligacion");
+                b.Property(x => x.Name).HasMaxLength(150).IsRequired();
+                b.Property(x => x.Description).HasMaxLength(500);
+                b.Property(x => x.Active).HasDefaultValue(true);
+                b.Property(x => x.CreatedAt).HasDefaultValueSql("NOW()");
+                b.HasIndex(x => x.Name).IsUnique();
+            });
+
+            builder.Entity<TipoProceso>(b =>
+            {
+                b.ToTable("TipoProceso");
+                b.Property(x => x.Name).HasMaxLength(150).IsRequired();
+                b.Property(x => x.Description).HasMaxLength(500);
+                b.Property(x => x.Active).HasDefaultValue(true);
+                b.Property(x => x.CreatedAt).HasDefaultValueSql("NOW()");
+                b.HasIndex(x => x.Name).IsUnique();
             });
         }
     }
