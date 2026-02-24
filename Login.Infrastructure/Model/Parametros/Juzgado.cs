@@ -2,7 +2,8 @@
 
 namespace Login.Infrastructure.Model.Parametros
 {
-    public class TipoProceso : ParametricBase
+    public class Juzgado : ParametricBase
     {
+        public string City { get; set; } = string.Empty;
     }
 }

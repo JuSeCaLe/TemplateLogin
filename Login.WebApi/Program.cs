@@ -241,6 +241,56 @@ using (var scope = app.Services.CreateScope())
         }
     }
 
+    // ---- TIPO PROCESO ----
+    string[] courts =
+    [
+        "Juzgado 01 Civil Municipal",
+        "Juzgado 10 Civil del Circuito"
+    ];
+
+    foreach (var name in courts)
+    {
+        var exists = await db.Juzgado
+            .AnyAsync(x => x.Name.ToLower() == name.ToLower());
+
+        if (!exists)
+        {
+            db.Juzgado.Add(new Juzgado
+            {
+                Name = name,
+                Description = name,
+                City = name.Contains("Municipal") ? "Bogotá" : "Medellín",
+                Active = true,
+                CreatedAt = DateTime.UtcNow
+            });
+        }
+    }
+
+    // ----DEMANDANTES----
+    string[] demandantes =
+    [
+        "Bancolombia",
+        "BBVA",
+        "Davivienda"
+    ];
+
+    foreach (var name in demandantes)
+    {
+        var exists = await db.Demandante
+            .AnyAsync(x => x.Name.ToLower() == name.ToLower());
+
+        if (!exists)
+        {
+            db.Demandante.Add(new Demandante
+            {
+                Name = name,
+                Description = name,
+                Active = true,
+                CreatedAt = DateTime.UtcNow
+            });
+        }
+    }
+
     await db.SaveChangesAsync();
 }
 

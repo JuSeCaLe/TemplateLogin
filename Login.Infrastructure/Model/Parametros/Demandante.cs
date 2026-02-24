@@ -2,5 +2,7 @@
 
 namespace Login.Infrastructure.Model.Parametros
 {
-    public class TipoObligacion : ParametricBase { }
+    public class Demandante : ParametricBase
+    {
+    }
 }
