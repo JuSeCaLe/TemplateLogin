@@ -12,7 +12,7 @@ var builder = WebApplication.CreateBuilder(args);
 var corsAllowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Value?.
     Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
     ?? Array.Empty<string>();
-var connectionString = builder.Configuration.GetConnectionString("loginConection");
+var connectionString = builder.Configuration.GetConnectionString("DefaultConection");
 // Add services to the container.
 
 builder.Services.AddControllers();
@@ -51,7 +51,7 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 builder.Services.AddDbContext<DataContext>(
-    options => options.UseNpgsql(
+    options => options.UseSqlServer(
             connectionString,
             b => b.MigrationsAssembly("Login.Infrastructure")
         )
@@ -116,6 +116,7 @@ using (var scope = app.Services.CreateScope())
     var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<AppRole>>();
     var userManager = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
     var db = scope.ServiceProvider.GetRequiredService<DataContext>();
+    db.Database.Migrate();
 
     // ----- ROLES -----
     string[] roles = ["r-admin", "r-user"];

@@ -25,13 +25,13 @@
             {
                 b.Property(r => r.Description).HasMaxLength(250);
                 b.Property(r => r.Active).HasDefaultValue(true);
-                b.Property(r => r.CreatedAt).HasDefaultValueSql("NOW()");
+                b.Property(r => r.CreatedAt).HasDefaultValueSql("SYSDATETIME()");
             });
 
             builder.Entity<AppUser>(b =>
             {
                 b.Property(u => u.Active).HasDefaultValue(true);
-                b.Property(u => u.CreatedAt).HasDefaultValueSql("NOW()");
+                b.Property(u => u.CreatedAt).HasDefaultValueSql("SYSDATETIME()");
             });
 
             builder.Entity<TipoObligacion>(b =>
@@ -40,7 +40,7 @@
                 b.Property(x => x.Name).HasMaxLength(150).IsRequired();
                 b.Property(x => x.Description).HasMaxLength(500);
                 b.Property(x => x.Active).HasDefaultValue(true);
-                b.Property(x => x.CreatedAt).HasDefaultValueSql("NOW()");
+                b.Property(x => x.CreatedAt).HasDefaultValueSql("SYSDATETIME()");
                 b.HasIndex(x => x.Name).IsUnique();
             });
 
@@ -50,7 +50,7 @@
                 b.Property(x => x.Name).HasMaxLength(150).IsRequired();
                 b.Property(x => x.Description).HasMaxLength(500);
                 b.Property(x => x.Active).HasDefaultValue(true);
-                b.Property(x => x.CreatedAt).HasDefaultValueSql("NOW()");
+                b.Property(x => x.CreatedAt).HasDefaultValueSql("SYSDATETIME()");
                 b.HasIndex(x => x.Name).IsUnique();
             });
 
@@ -61,7 +61,7 @@
                 b.Property(x => x.City).HasMaxLength(70);
                 b.Property(x => x.Description).HasMaxLength(500);
                 b.Property(x => x.Active).HasDefaultValue(true);
-                b.Property(x => x.CreatedAt).HasDefaultValueSql("NOW()");
+                b.Property(x => x.CreatedAt).HasDefaultValueSql("SYSDATETIME()");
                 b.HasIndex(x => x.Name).IsUnique();
             });
 
@@ -71,7 +71,7 @@
                 b.Property(x => x.Name).HasMaxLength(150).IsRequired();
                 b.Property(x => x.Description).HasMaxLength(500);
                 b.Property(x => x.Active).HasDefaultValue(true);
-                b.Property(x => x.CreatedAt).HasDefaultValueSql("NOW()");
+                b.Property(x => x.CreatedAt).HasDefaultValueSql("SYSDATETIME()");
                 b.HasIndex(x => x.Name).IsUnique();
             });
         }
