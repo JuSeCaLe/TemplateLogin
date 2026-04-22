@@ -50,12 +50,17 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-builder.Services.AddDbContext<DataContext>(
-    options => options.UseSqlServer(
-            connectionString,
-            b => b.MigrationsAssembly("Login.Infrastructure")
-        )
-    );
+builder.Services.AddDbContext<DataContext>(options =>
+    options.UseSqlServer(
+        connectionString,
+        sqlOptions =>
+        {
+            sqlOptions.MigrationsAssembly("Login.Infrastructure");
+            sqlOptions.EnableRetryOnFailure(
+                maxRetryCount: 5,
+                maxRetryDelay: TimeSpan.FromSeconds(10),
+                errorNumbersToAdd: null);
+        }));
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(
@@ -113,186 +118,169 @@ app.MapControllers();
 
 using (var scope = app.Services.CreateScope())
 {
-    var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<AppRole>>();
-    var userManager = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
-    var db = scope.ServiceProvider.GetRequiredService<DataContext>();
-    db.Database.Migrate();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
 
-    // ----- ROLES -----
-    string[] roles = ["r-admin", "r-user"];
-
-    foreach (var role in roles)
+    try
     {
-        if (!await roleManager.RoleExistsAsync(role))
+        var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<AppRole>>();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
+        var db = scope.ServiceProvider.GetRequiredService<DataContext>();
+
+        await db.Database.MigrateAsync();
+
+        string[] roles = ["r-admin", "r-user"];
+
+        foreach (var role in roles)
         {
-            await roleManager.CreateAsync(new AppRole
+            if (!await roleManager.RoleExistsAsync(role))
             {
-                Name = role,
-                Description = role == "r-admin" ? "Administrador del sistema" : "Usuario estándar",
+                await roleManager.CreateAsync(new AppRole
+                {
+                    Name = role,
+                    Description = role == "r-admin" ? "Administrador del sistema" : "Usuario estándar",
+                    Active = true,
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+        }
+
+        var adminEmail = "admin@abogapp.com";
+        var adminPassword = "Admin123!";
+        var adminFirstName = "admin";
+        var adminLastName = "abogapp";
+
+        var adminUser = await userManager.FindByEmailAsync(adminEmail);
+        if (adminUser == null)
+        {
+            adminUser = new AppUser
+            {
+                UserName = adminEmail,
+                Email = adminEmail,
+                FirstName = adminFirstName,
+                LastName = adminLastName,
+                EmailConfirmed = true,
                 Active = true,
                 CreatedAt = DateTime.UtcNow
-            });
-        }
-    }
+            };
 
-    // ----- USUARIO ADMIN -----
-    var adminEmail = "admin@abogapp.com";
-    var adminPassword = "Admin123!";
-    var adminFirstName = "admin";
-    var adminLastName = "abogapp";
-
-    var adminUser = await userManager.FindByEmailAsync(adminEmail);
-    if (adminUser == null)
-    {
-        adminUser = new AppUser
-        {
-            UserName = adminEmail,
-            Email = adminEmail,
-            FirstName = adminFirstName,
-            LastName = adminLastName,
-            EmailConfirmed = true,
-            Active = true,
-            CreatedAt = DateTime.UtcNow
-        };
-
-        var result = await userManager.CreateAsync(adminUser, adminPassword);
-        if (result.Succeeded)
-        {
-            await userManager.AddToRoleAsync(adminUser, "r-admin");
-        }
-    }
-
-    // ----- USUARIO NORMAL -----
-    var userEmail = "user@abogapp.com";
-    var userPassword = "User123!";
-    var userFirstName = "user";
-    var userLastName = "abogapp";
-
-    var normalUser = await userManager.FindByEmailAsync(userEmail);
-    if (normalUser == null)
-    {
-        normalUser = new AppUser
-        {
-            UserName = userEmail,
-            Email = userEmail,
-            FirstName = userFirstName,
-            LastName = userLastName,
-            EmailConfirmed = true,
-            Active = true,
-            CreatedAt = DateTime.UtcNow
-        };
-
-        var result = await userManager.CreateAsync(normalUser, userPassword);
-        if (result.Succeeded)
-        {
-            await userManager.AddToRoleAsync(normalUser, "r-user");
-        }
-    }
-
-    // ---- TIPO OBLIGACIÓN ----
-    string[] obligationTypes =
-    [
-        "PAGARE",
-        "CONTRATO",
-        "LETRA"
-    ];
-
-    foreach (var name in obligationTypes)
-    {
-        var exists = await db.TiposObligacion
-            .AnyAsync(x => x.Name.ToLower() == name.ToLower());
-
-        if (!exists)
-        {
-            db.TiposObligacion.Add(new TipoObligacion
+            var result = await userManager.CreateAsync(adminUser, adminPassword);
+            if (result.Succeeded)
             {
-                Name = name,
-                Description = name,
+                await userManager.AddToRoleAsync(adminUser, "r-admin");
+            }
+        }
+
+        var userEmail = "user@abogapp.com";
+        var userPassword = "User123!";
+        var userFirstName = "user";
+        var userLastName = "abogapp";
+
+        var normalUser = await userManager.FindByEmailAsync(userEmail);
+        if (normalUser == null)
+        {
+            normalUser = new AppUser
+            {
+                UserName = userEmail,
+                Email = userEmail,
+                FirstName = userFirstName,
+                LastName = userLastName,
+                EmailConfirmed = true,
                 Active = true,
                 CreatedAt = DateTime.UtcNow
-            });
-        }
-    }
+            };
 
-    // ---- TIPO PROCESO ----
-    string[] processTypes =
-    [
-        "EJECUTIVO SINGULAR",
-        "EJECUTIVO HIPOTECARIO",
-        "MIXTO",
-        "PRENDARIO",
-        "RESTITUCIÓN",
-        "LEASING"
-    ];
-
-    foreach (var name in processTypes)
-    {
-        var exists = await db.TiposProceso
-            .AnyAsync(x => x.Name.ToLower() == name.ToLower());
-
-        if (!exists)
-        {
-            db.TiposProceso.Add(new TipoProceso
+            var result = await userManager.CreateAsync(normalUser, userPassword);
+            if (result.Succeeded)
             {
-                Name = name,
-                Description = name,
-                Active = true,
-                CreatedAt = DateTime.UtcNow
-            });
+                await userManager.AddToRoleAsync(normalUser, "r-user");
+            }
         }
-    }
 
-    // ---- TIPO PROCESO ----
-    string[] courts =
-    [
-        "Juzgado 01 Civil Municipal",
-        "Juzgado 10 Civil del Circuito"
-    ];
-
-    foreach (var name in courts)
-    {
-        var exists = await db.Juzgado
-            .AnyAsync(x => x.Name.ToLower() == name.ToLower());
-
-        if (!exists)
+        string[] obligationTypes = ["PAGARE", "CONTRATO", "LETRA"];
+        foreach (var name in obligationTypes)
         {
-            db.Juzgado.Add(new Juzgado
+            var exists = await db.TiposObligacion.AnyAsync(x => x.Name.ToLower() == name.ToLower());
+            if (!exists)
             {
-                Name = name,
-                Description = name,
-                City = name.Contains("Municipal") ? "Bogotá" : "Medellín",
-                Active = true,
-                CreatedAt = DateTime.UtcNow
-            });
+                db.TiposObligacion.Add(new TipoObligacion
+                {
+                    Name = name,
+                    Description = name,
+                    Active = true,
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
         }
-    }
 
-    // ----DEMANDANTES----
-    string[] demandantes =
-    [
-        "Bancolombia",
-        "BBVA",
-        "Davivienda"
-    ];
+        string[] processTypes =
+        [
+            "EJECUTIVO SINGULAR",
+            "EJECUTIVO HIPOTECARIO",
+            "MIXTO",
+            "PRENDARIO",
+            "RESTITUCIÓN",
+            "LEASING"
+        ];
 
-    foreach (var name in demandantes)
-    {
-        var exists = await db.Demandante
-            .AnyAsync(x => x.Name.ToLower() == name.ToLower());
-
-        if (!exists)
+        foreach (var name in processTypes)
         {
-            db.Demandante.Add(new Demandante
+            var exists = await db.TiposProceso.AnyAsync(x => x.Name.ToLower() == name.ToLower());
+            if (!exists)
             {
-                Name = name,
-                Description = name,
-                Active = true,
-                CreatedAt = DateTime.UtcNow
-            });
+                db.TiposProceso.Add(new TipoProceso
+                {
+                    Name = name,
+                    Description = name,
+                    Active = true,
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
         }
-    }
 
-    await db.SaveChangesAsync();
+        string[] courts =
+        [
+            "Juzgado 01 Civil Municipal",
+            "Juzgado 10 Civil del Circuito"
+        ];
+
+        foreach (var name in courts)
+        {
+            var exists = await db.Juzgado.AnyAsync(x => x.Name.ToLower() == name.ToLower());
+            if (!exists)
+            {
+                db.Juzgado.Add(new Juzgado
+                {
+                    Name = name,
+                    Description = name,
+                    City = name.Contains("Municipal") ? "Bogotá" : "Medellín",
+                    Active = true,
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+        }
+
+        string[] demandantes = ["Bancolombia", "BBVA", "Davivienda"];
+        foreach (var name in demandantes)
+        {
+            var exists = await db.Demandante.AnyAsync(x => x.Name.ToLower() == name.ToLower());
+            if (!exists)
+            {
+                db.Demandante.Add(new Demandante
+                {
+                    Name = name,
+                    Description = name,
+                    Active = true,
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+        }
+
+        await db.SaveChangesAsync();
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Startup/seed error: {ex}");
+    }
 }
 
 app.Run();
