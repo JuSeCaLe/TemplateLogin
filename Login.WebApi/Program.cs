@@ -216,8 +216,8 @@ using (var scope = app.Services.CreateScope())
         [
             "EJECUTIVO SINGULAR",
             "EJECUTIVO HIPOTECARIO",
-            "MIXTO",
-            "PRENDARIO",
+            "EJECUTIVO MIXTO",
+            "EJECUTIVO PRENDARIO",
             "RESTITUCIÓN",
             "LEASING"
         ];
