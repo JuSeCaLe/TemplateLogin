@@ -68,9 +68,9 @@ public class CasesController : ControllerBase
         entity.ProcessStages.Add(new CaseProcessStage
         {
             CaseId = id,
-            CreatedAt = DateTime.UtcNow.ToString("yyyy-MM-dd"),
+            CreatedAt = req.StageDate ?? DateTime.UtcNow.ToString("yyyy-MM-dd"),
             StageName = req.StageName.Trim(),
-            SubStageName = req.SubStageName.Trim(),
+            SubStageName = req.SubStageName?.Trim() ?? "",
             Observation = req.Observation?.Trim()
         });
         await _db.SaveChangesAsync();
@@ -160,6 +160,7 @@ public class CasesController : ControllerBase
 
     private static CaseDto ToDto(Case c) => new(
         c.Id,
+        c.CreatedAt.ToString("yyyy-MM-dd"),
         new ProcessInfoDto(c.Process.Radicado, c.Process.ProcessType, c.Process.Court, c.Process.City),
         c.Parties.Select(p => new PartyInfoDto(p.Person, p.ProcessRole)).ToList(),
         c.FinancialInfo is null ? null : new FinancialInfoDto(c.FinancialInfo.Capital, c.FinancialInfo.Obligations, c.FinancialInfo.FngFag),

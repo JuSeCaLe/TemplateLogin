@@ -12,6 +12,7 @@ public record ProceduralNoteDto(int Id, string CreatedAt, string Text);
 
 public record CaseDto(
     int Id,
+    string CreatedAt,
     ProcessInfoDto Process,
     List<PartyInfoDto> PartiesInfo,
     FinancialInfoDto? FinancialInfo,
@@ -43,5 +44,5 @@ public record UpdateCaseRequest(
     ClosureInfoDto? Closure
 );
 
-public record AddProcessStageRequest(string StageName, string SubStageName, string? Observation);
+public record AddProcessStageRequest(string? StageDate, string StageName, string? SubStageName, string? Observation);
 public record AddProceduralNoteRequest(string Text);

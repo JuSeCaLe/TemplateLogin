@@ -2,6 +2,7 @@
 {
     using Login.Infrastructure.Data.Identity;
     using Login.Infrastructure.Model.Cases;
+    using Login.Infrastructure.Model.Catalog;
     using Login.Infrastructure.Model.Parametros;
     using Microsoft.AspNetCore.Identity;
     using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
@@ -22,6 +23,10 @@
         public DbSet<CaseParty> CaseParties => Set<CaseParty>();
         public DbSet<CaseProcessStage> CaseProcessStages => Set<CaseProcessStage>();
         public DbSet<CaseProceduralNote> CaseProceduralNotes => Set<CaseProceduralNote>();
+
+        public DbSet<CatalogProcessType> CatalogProcessTypes => Set<CatalogProcessType>();
+        public DbSet<CatalogStage> CatalogStages => Set<CatalogStage>();
+        public DbSet<CatalogSubStage> CatalogSubStages => Set<CatalogSubStage>();
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -79,6 +84,26 @@
                 b.Property(x => x.Active).HasDefaultValue(true);
                 b.Property(x => x.CreatedAt).HasDefaultValueSql("SYSDATETIME()");
                 b.HasIndex(x => x.Name).IsUnique();
+            });
+
+            builder.Entity<CatalogProcessType>(b =>
+            {
+                b.ToTable("CatalogProcessType");
+                b.Property(x => x.Name).HasMaxLength(150).IsRequired();
+                b.HasMany(x => x.Stages).WithOne(x => x.ProcessType).HasForeignKey(x => x.CatalogProcessTypeId).OnDelete(DeleteBehavior.Cascade);
+            });
+
+            builder.Entity<CatalogStage>(b =>
+            {
+                b.ToTable("CatalogStage");
+                b.Property(x => x.Name).HasMaxLength(300).IsRequired();
+                b.HasMany(x => x.SubStages).WithOne(x => x.Stage).HasForeignKey(x => x.CatalogStageId).OnDelete(DeleteBehavior.Cascade);
+            });
+
+            builder.Entity<CatalogSubStage>(b =>
+            {
+                b.ToTable("CatalogSubStage");
+                b.Property(x => x.Name).HasMaxLength(300).IsRequired();
             });
 
             builder.Entity<Case>(b =>

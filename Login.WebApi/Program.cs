@@ -1,6 +1,7 @@
 ﻿using Login.Infrastructure.Data.Identity;
 using Login.Infrastructure.Model;
 using Login.Infrastructure.Model.Parametros;
+using Login.WebApi.Seeding;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -276,6 +277,8 @@ using (var scope = app.Services.CreateScope())
         }
 
         await db.SaveChangesAsync();
+
+        await CatalogSeeder.SeedAsync(db);
     }
     catch (Exception ex)
     {
