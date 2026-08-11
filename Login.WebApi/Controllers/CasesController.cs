@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using System.Security.Claims;
+using ClosedXML.Excel;
 using Login.Infrastructure.Data.Identity;
 using Login.Infrastructure.Model;
 using Login.Infrastructure.Model.Cases;
@@ -52,6 +53,90 @@ public class CasesController : ControllerBase
             .Where(c => c.Process.Radicado.Contains(term))
             .ToListAsync();
         return Ok(cases.Select(ToDto));
+    }
+
+    // Mismo criterio de autorización que GetAll: admin exporta todo, un
+    // usuario con rol(es)-demandante solo exporta sus propios casos.
+    [HttpGet("export")]
+    public async Task<IActionResult> Export()
+    {
+        var auth = await GetAuthContextAsync();
+        var cases = await AuthorizedQuery(auth)
+            .OrderBy(c => c.Process.Radicado)
+            .ToListAsync();
+
+        using var workbook = new XLWorkbook();
+        var sheet = workbook.Worksheets.Add("Casos");
+
+        string[] headers =
+        [
+            "Nombre demandado", "Cédula demandado", "Obligaciones", "Capital",
+            "Fecha presentación demanda", "Juzgado", "Radicación", "Tipo de proceso",
+            "Etapa actual", "Observaciones"
+        ];
+        for (var i = 0; i < headers.Length; i++)
+            sheet.Cell(1, i + 1).Value = headers[i];
+        sheet.Row(1).Style.Font.Bold = true;
+
+        var row = 2;
+        foreach (var c in cases)
+        {
+            var defendant = c.Parties.FirstOrDefault(p => p.ProcessRole == "DEMANDADO");
+            var (name, document) = ParseDefendant(defendant?.Person);
+
+            var lastStage = c.ProcessStages.OrderByDescending(s => s.Id).FirstOrDefault();
+            var currentStage = lastStage is null
+                ? ""
+                : string.Join(" / ", new[] { lastStage.StageName, lastStage.SubStageName }
+                    .Where(s => !string.IsNullOrWhiteSpace(s)));
+
+            // "Observaciones" consolida el historial de observaciones de cada
+            // etapa del proceso (incluye las de tipo "Impulso procesal") en una
+            // sola celda, en orden cronológico.
+            var observations = string.Join(" | ", c.ProcessStages
+                .Where(s => !string.IsNullOrWhiteSpace(s.Observation))
+                .OrderBy(s => s.Id)
+                .Select(s => $"[{s.CreatedAt}] {s.Observation}"));
+
+            sheet.Cell(row, 1).Value = name;
+            sheet.Cell(row, 2).Value = document;
+            sheet.Cell(row, 3).Value = c.FinancialInfo?.Obligations ?? "";
+            sheet.Cell(row, 4).Value = c.FinancialInfo?.Capital ?? 0;
+            sheet.Cell(row, 5).Value = c.Process.FiledAt ?? "";
+            sheet.Cell(row, 6).Value = c.Process.Court;
+            sheet.Cell(row, 7).Value = c.Process.Radicado;
+            sheet.Cell(row, 8).Value = c.Process.ProcessType;
+            sheet.Cell(row, 9).Value = currentStage;
+            sheet.Cell(row, 10).Value = observations;
+            row++;
+        }
+
+        sheet.Columns().AdjustToContents();
+
+        using var ms = new MemoryStream();
+        workbook.SaveAs(ms);
+
+        var fileName = $"casos_{DateTime.UtcNow:yyyyMMdd}.xlsx";
+        return File(
+            ms.ToArray(),
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            fileName);
+    }
+
+    // El campo Person de CaseParty se guarda como "Nombre|Tipo|Documento".
+    // Se tolera el formato legado "Nombre | Documento" (sin tipo) para no
+    // romper casos creados antes de estandarizarlo.
+    private static (string Name, string Document) ParseDefendant(string? person)
+    {
+        if (string.IsNullOrWhiteSpace(person)) return ("", "");
+
+        var parts = person.Split('|').Select(p => p.Trim()).ToArray();
+        return parts.Length switch
+        {
+            >= 3 => (parts[0], parts[2]),
+            2 => (parts[0], parts[1]),
+            _ => (parts[0], "")
+        };
     }
 
     [HttpPost]
@@ -221,10 +306,11 @@ public class CasesController : ControllerBase
     {
         entity.DemandanteRoleId = req.DemandanteRoleId;
 
-        entity.Process.Radicado = req.Process.Radicado.Trim();
+        entity.Process.Radicado = req.Process.Radicado?.Trim() ?? "";
         entity.Process.ProcessType = req.Process.ProcessType.Trim();
         entity.Process.Court = req.Process.Court.Trim();
         entity.Process.City = req.Process.City.Trim();
+        entity.Process.FiledAt = req.Process.FiledAt;
 
         entity.FinancialInfo = MapFinancial(req.FinancialInfo);
         entity.Measures = MapMeasures(req.Measures);
@@ -239,10 +325,11 @@ public class CasesController : ControllerBase
 
     private static CaseProcess MapProcess(ProcessInfoDto d) => new()
     {
-        Radicado = d.Radicado.Trim(),
+        Radicado = d.Radicado?.Trim() ?? "",
         ProcessType = d.ProcessType.Trim(),
         Court = d.Court.Trim(),
-        City = d.City.Trim()
+        City = d.City.Trim(),
+        FiledAt = d.FiledAt
     };
 
     private static CaseFinancial? MapFinancial(FinancialInfoDto? d) =>
@@ -267,7 +354,7 @@ public class CasesController : ControllerBase
         c.CreatedAt.ToString("yyyy-MM-dd"),
         c.DemandanteRoleId,
         c.DemandanteRole?.Name,
-        new ProcessInfoDto(c.Process.Radicado, c.Process.ProcessType, c.Process.Court, c.Process.City),
+        new ProcessInfoDto(c.Process.Radicado, c.Process.ProcessType, c.Process.Court, c.Process.City, c.Process.FiledAt),
         c.Parties.Select(p => new PartyInfoDto(p.Person, p.ProcessRole)).ToList(),
         c.FinancialInfo is null ? null : new FinancialInfoDto(c.FinancialInfo.Capital, c.FinancialInfo.Obligations, c.FinancialInfo.FngFag),
         c.Measures is null ? null : new MeasuresInfoDto(c.Measures.Embargo, c.Measures.EmbargoDate, c.Measures.RemanentEmbargo, c.Measures.RemanentEntity),

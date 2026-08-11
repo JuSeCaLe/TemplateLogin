@@ -284,26 +284,36 @@ using (var scope = app.Services.CreateScope())
 
         await db.SaveChangesAsync();
 
-        var demandanteUserEmail = "demandante@abogapp.com";
+        // Un usuario demo por cada rol-demandante, para poder probar el filtrado
+        // por rol (ver CasesController.AuthorizedQuery). "demandante@abogapp.com"
+        // se conserva tal cual para Bancolombia por compatibilidad con logins ya
+        // existentes; los demás siguen el patrón demandante.{rol}@abogapp.com.
         var demandanteUserPassword = "Demandante123!";
 
-        if (await userManager.FindByEmailAsync(demandanteUserEmail) is null)
+        foreach (var name in demandanteRoles)
         {
-            var demandanteUser = new AppUser
-            {
-                UserName = demandanteUserEmail,
-                Email = demandanteUserEmail,
-                FirstName = "Usuario",
-                LastName = "Bancolombia",
-                EmailConfirmed = true,
-                Active = true,
-                CreatedAt = DateTime.UtcNow
-            };
+            var demandanteUserEmail = name == "Bancolombia"
+                ? "demandante@abogapp.com"
+                : $"demandante.{name.ToLowerInvariant()}@abogapp.com";
 
-            var result = await userManager.CreateAsync(demandanteUser, demandanteUserPassword);
-            if (result.Succeeded)
+            if (await userManager.FindByEmailAsync(demandanteUserEmail) is null)
             {
-                await userManager.AddToRoleAsync(demandanteUser, "Bancolombia");
+                var demandanteUser = new AppUser
+                {
+                    UserName = demandanteUserEmail,
+                    Email = demandanteUserEmail,
+                    FirstName = "Usuario",
+                    LastName = name,
+                    EmailConfirmed = true,
+                    Active = true,
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                var result = await userManager.CreateAsync(demandanteUser, demandanteUserPassword);
+                if (result.Succeeded)
+                {
+                    await userManager.AddToRoleAsync(demandanteUser, name);
+                }
             }
         }
 

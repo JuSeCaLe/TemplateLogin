@@ -103,10 +103,13 @@
 
                 b.OwnsOne(x => x.Process, p =>
                 {
-                    p.Property(x => x.Radicado).HasMaxLength(50).IsRequired();
+                    // Radicado no es obligatorio al crear el caso: se puede
+                    // completar luego desde la edición (ver CasesController).
+                    p.Property(x => x.Radicado).HasMaxLength(50);
                     p.Property(x => x.ProcessType).HasMaxLength(100).IsRequired();
                     p.Property(x => x.Court).HasMaxLength(150).IsRequired();
                     p.Property(x => x.City).HasMaxLength(100).IsRequired();
+                    p.Property(x => x.FiledAt).HasMaxLength(10);
                 });
 
                 b.OwnsOne(x => x.FinancialInfo, f =>
