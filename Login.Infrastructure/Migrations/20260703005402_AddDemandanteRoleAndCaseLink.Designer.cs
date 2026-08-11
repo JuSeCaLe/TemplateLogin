@@ -4,6 +4,7 @@ using Login.Infrastructure.Model;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Login.Infrastructure.Migrations
 {
     [DbContext(typeof(DataContext))]
-    partial class DataContextModelSnapshot : ModelSnapshot
+    [Migration("20260703005402_AddDemandanteRoleAndCaseLink")]
+    partial class AddDemandanteRoleAndCaseLink
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -41,14 +44,12 @@ namespace Login.Infrastructure.Migrations
                         .HasColumnType("datetime2")
                         .HasDefaultValueSql("SYSDATETIME()");
 
+                    b.Property<Guid?>("DemandanteId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<string>("Description")
                         .HasMaxLength(250)
                         .HasColumnType("nvarchar(250)");
-
-                    b.Property<bool>("IsDemandante")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(false);
 
                     b.Property<string>("Name")
                         .HasMaxLength(256)
@@ -59,6 +60,10 @@ namespace Login.Infrastructure.Migrations
                         .HasColumnType("nvarchar(256)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("DemandanteId")
+                        .IsUnique()
+                        .HasFilter("[DemandanteId] IS NOT NULL");
 
                     b.HasIndex("NormalizedName")
                         .IsUnique()
@@ -164,13 +169,12 @@ namespace Login.Infrastructure.Migrations
                         .HasColumnType("datetime2")
                         .HasDefaultValueSql("SYSDATETIME()");
 
-                    b.Property<string>("DemandanteRoleId")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(450)");
+                    b.Property<Guid>("DemandanteId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("DemandanteRoleId");
+                    b.HasIndex("DemandanteId");
 
                     b.ToTable("Case", (string)null);
                 });
@@ -330,6 +334,39 @@ namespace Login.Infrastructure.Migrations
                     b.HasIndex("CatalogStageId");
 
                     b.ToTable("CatalogSubStage", (string)null);
+                });
+
+            modelBuilder.Entity("Login.Infrastructure.Model.Parametros.Demandante", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("Active")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasDefaultValueSql("SYSDATETIME()");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("Demandante", (string)null);
                 });
 
             modelBuilder.Entity("Login.Infrastructure.Model.Parametros.Juzgado", b =>
@@ -542,11 +579,21 @@ namespace Login.Infrastructure.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
+            modelBuilder.Entity("Login.Infrastructure.Data.Identity.AppRole", b =>
+                {
+                    b.HasOne("Login.Infrastructure.Model.Parametros.Demandante", "Demandante")
+                        .WithMany()
+                        .HasForeignKey("DemandanteId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Demandante");
+                });
+
             modelBuilder.Entity("Login.Infrastructure.Model.Cases.Case", b =>
                 {
-                    b.HasOne("Login.Infrastructure.Data.Identity.AppRole", "DemandanteRole")
+                    b.HasOne("Login.Infrastructure.Model.Parametros.Demandante", "Demandante")
                         .WithMany()
-                        .HasForeignKey("DemandanteRoleId")
+                        .HasForeignKey("DemandanteId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
@@ -753,7 +800,7 @@ namespace Login.Infrastructure.Migrations
 
                     b.Navigation("Closure");
 
-                    b.Navigation("DemandanteRole");
+                    b.Navigation("Demandante");
 
                     b.Navigation("FinancialInfo");
 

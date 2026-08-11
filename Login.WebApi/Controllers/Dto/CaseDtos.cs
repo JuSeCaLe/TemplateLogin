@@ -13,6 +13,8 @@ public record ProceduralNoteDto(int Id, string CreatedAt, string Text);
 public record CaseDto(
     int Id,
     string CreatedAt,
+    string DemandanteRoleId,
+    string? DemandanteRoleName,
     ProcessInfoDto Process,
     List<PartyInfoDto> PartiesInfo,
     FinancialInfoDto? FinancialInfo,
@@ -25,6 +27,7 @@ public record CaseDto(
 );
 
 public record CreateCaseRequest(
+    string DemandanteRoleId,
     ProcessInfoDto Process,
     List<PartyInfoDto> PartiesInfo,
     FinancialInfoDto? FinancialInfo,
@@ -35,6 +38,7 @@ public record CreateCaseRequest(
 );
 
 public record UpdateCaseRequest(
+    string DemandanteRoleId,
     ProcessInfoDto Process,
     List<PartyInfoDto> PartiesInfo,
     FinancialInfoDto? FinancialInfo,

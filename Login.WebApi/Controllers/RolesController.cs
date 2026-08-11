@@ -1,9 +1,10 @@
-﻿using System;
+using System;
 using Login.Infrastructure.Data.Identity;
+using Login.Infrastructure.Model;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace Login.WebApi.Controllers
 {
@@ -12,26 +13,36 @@ namespace Login.WebApi.Controllers
     [Authorize(Roles = "r-admin")]
     public class RolesController : ControllerBase
     {
+        private static readonly string[] SystemRoleNames = ["r-admin", "r-user"];
+
         private readonly RoleManager<AppRole> _roleManager;
-        
-        public RolesController(RoleManager<AppRole> roleManager)
+        private readonly DataContext _db;
+
+        public RolesController(RoleManager<AppRole> roleManager, DataContext db)
         {
             _roleManager = roleManager;
+            _db = db;
         }
 
-        public record  RoleDto(string Id, string Name, string? Description, bool Active, DateTime CreatedAt);
-        public record CreateRoleRequest(string Name, string? Description, bool Active);
-        public record UpdateRoleRequest(string Name, string? Description, bool Active);
+        public record RoleDto(string Id, string Name, string? Description, bool Active, DateTime CreatedAt, bool IsDemandante);
+        public record CreateRoleRequest(string Name, string? Description, bool Active, bool IsDemandante);
+        public record UpdateRoleRequest(string Name, string? Description, bool Active, bool IsDemandante);
 
+        private static RoleDto ToDto(AppRole r) => new(
+            r.Id, r.Name!, r.Description, r.Active, r.CreatedAt, r.IsDemandante
+        );
+
+        private static bool IsSystemRole(string? name) =>
+            name is not null && SystemRoleNames.Contains(name, StringComparer.OrdinalIgnoreCase);
 
         [HttpGet]
-        public ActionResult<IEnumerable<RoleDto>> GetAll()
+        public async Task<ActionResult<IEnumerable<RoleDto>>> GetAll()
         {
-            var roles = _roleManager.Roles
+            var roles = await _roleManager.Roles
                 .OrderBy(r => r.Name)
-                .Select(r => new RoleDto(r.Id, r.Name!, r.Description, r.Active, r.CreatedAt))
-                .ToList();
-            return Ok(roles);
+                .ToListAsync();
+
+            return Ok(roles.Select(ToDto));
         }
 
         [HttpGet("{id}")]
@@ -41,13 +52,7 @@ namespace Login.WebApi.Controllers
             if (role is null)
                 return NotFound(new { message = "Rol no encontrado" });
 
-            return Ok(new RoleDto(
-                role.Id,
-                role.Name!,
-                role.Description,
-                role.Active,
-                role.CreatedAt
-            ));
+            return Ok(ToDto(role));
         }
 
         [HttpPost]
@@ -66,6 +71,7 @@ namespace Login.WebApi.Controllers
                 NormalizedName = name.ToUpperInvariant(),
                 Description = req.Description,
                 Active = req.Active,
+                IsDemandante = req.IsDemandante,
                 CreatedAt = DateTime.UtcNow
             };
 
@@ -74,7 +80,7 @@ namespace Login.WebApi.Controllers
                 return BadRequest(new { message = string.Join("; ", result.Errors.Select(e => e.Description)) });
 
             var created = await _roleManager.FindByNameAsync(name);
-            return Ok(new RoleDto(created!.Id, created.Name!, created.Description, created.Active, created.CreatedAt));
+            return Ok(ToDto(created!));
         }
 
         [HttpPut("{id}")]
@@ -87,7 +93,13 @@ namespace Login.WebApi.Controllers
             if (role is null)
                 return NotFound(new { message = "Rol no encontrado" });
 
+            if (IsSystemRole(role.Name))
+                return Conflict(new { message = "Este es un rol del sistema y no puede modificarse" });
+
             var newName = req.Name.Trim();
+
+            if (IsSystemRole(newName))
+                return BadRequest(new { message = $"\"{newName}\" es un nombre reservado para roles del sistema" });
 
             // Evitar duplicados
             if (!string.Equals(role.Name, newName, StringComparison.OrdinalIgnoreCase) &&
@@ -100,6 +112,7 @@ namespace Login.WebApi.Controllers
             role.NormalizedName = newName.ToUpperInvariant();
             role.Description = req.Description;
             role.Active = req.Active;
+            role.IsDemandante = req.IsDemandante;
 
             var result = await _roleManager.UpdateAsync(role);
             if (!result.Succeeded)
@@ -119,6 +132,12 @@ namespace Login.WebApi.Controllers
         {
             var role = await _roleManager.FindByIdAsync(id);
             if (role is null) return NotFound();
+
+            if (IsSystemRole(role.Name))
+                return Conflict(new { message = "Este es un rol del sistema y no puede eliminarse" });
+
+            if (role.IsDemandante && await _db.Cases.AnyAsync(c => c.DemandanteRoleId == id))
+                return Conflict(new { message = "No se puede eliminar: existen casos asociados a este rol" });
 
             var result = await _roleManager.DeleteAsync(role);
             if (!result.Succeeded)

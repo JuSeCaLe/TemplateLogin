@@ -1,9 +1,14 @@
+using Login.Infrastructure.Data.Identity;
+
 namespace Login.Infrastructure.Model.Cases;
 
 public class Case
 {
     public int Id { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    public string DemandanteRoleId { get; set; } = null!;
+    public AppRole DemandanteRole { get; set; } = null!;
 
     public CaseProcess Process { get; set; } = new();
     public CaseFinancial? FinancialInfo { get; set; }

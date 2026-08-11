@@ -1,6 +1,7 @@
 ﻿using Login.Infrastructure.Data.Identity;
 using Login.Infrastructure.Model;
 using Login.Infrastructure.Model.Parametros;
+using Login.Infrastructure.Services;
 using Login.WebApi.Seeding;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
@@ -100,6 +101,8 @@ builder.Services
     .AddSignInManager()
     .AddDefaultTokenProviders();
 
+builder.Services.AddScoped<DemandanteAuthService>();
+
 
 var app = builder.Build();
 
@@ -140,6 +143,25 @@ using (var scope = app.Services.CreateScope())
                     Name = role,
                     Description = role == "r-admin" ? "Administrador del sistema" : "Usuario estándar",
                     Active = true,
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+        }
+
+        // Demandantes = roles marcados IsDemandante. Un usuario con uno de estos
+        // roles solo ve/crea casos de ese demandante (ver CasesController).
+        string[] demandanteRoles = ["Bancolombia", "BBVA", "Davivienda"];
+
+        foreach (var name in demandanteRoles)
+        {
+            if (!await roleManager.RoleExistsAsync(name))
+            {
+                await roleManager.CreateAsync(new AppRole
+                {
+                    Name = name,
+                    Description = $"Demandante: {name}",
+                    Active = true,
+                    IsDemandante = true,
                     CreatedAt = DateTime.UtcNow
                 });
             }
@@ -260,23 +282,30 @@ using (var scope = app.Services.CreateScope())
             }
         }
 
-        string[] demandantes = ["Bancolombia", "BBVA", "Davivienda"];
-        foreach (var name in demandantes)
+        await db.SaveChangesAsync();
+
+        var demandanteUserEmail = "demandante@abogapp.com";
+        var demandanteUserPassword = "Demandante123!";
+
+        if (await userManager.FindByEmailAsync(demandanteUserEmail) is null)
         {
-            var exists = await db.Demandante.AnyAsync(x => x.Name.ToLower() == name.ToLower());
-            if (!exists)
+            var demandanteUser = new AppUser
             {
-                db.Demandante.Add(new Demandante
-                {
-                    Name = name,
-                    Description = name,
-                    Active = true,
-                    CreatedAt = DateTime.UtcNow
-                });
+                UserName = demandanteUserEmail,
+                Email = demandanteUserEmail,
+                FirstName = "Usuario",
+                LastName = "Bancolombia",
+                EmailConfirmed = true,
+                Active = true,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            var result = await userManager.CreateAsync(demandanteUser, demandanteUserPassword);
+            if (result.Succeeded)
+            {
+                await userManager.AddToRoleAsync(demandanteUser, "Bancolombia");
             }
         }
-
-        await db.SaveChangesAsync();
 
         await CatalogSeeder.SeedAsync(db);
     }

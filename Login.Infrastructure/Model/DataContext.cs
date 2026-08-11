@@ -17,7 +17,6 @@
         public DbSet<TipoObligacion> TiposObligacion => Set<TipoObligacion>();
         public DbSet<TipoProceso> TiposProceso => Set<TipoProceso>();
         public DbSet<Juzgado> Juzgado => Set<Juzgado>();
-        public DbSet<Demandante> Demandante => Set<Demandante>();
 
         public DbSet<Case> Cases => Set<Case>();
         public DbSet<CaseParty> CaseParties => Set<CaseParty>();
@@ -37,6 +36,7 @@
                 b.Property(r => r.Description).HasMaxLength(250);
                 b.Property(r => r.Active).HasDefaultValue(true);
                 b.Property(r => r.CreatedAt).HasDefaultValueSql("SYSDATETIME()");
+                b.Property(r => r.IsDemandante).HasDefaultValue(false);
             });
 
             builder.Entity<AppUser>(b =>
@@ -70,16 +70,6 @@
                 b.ToTable("Juzgado");
                 b.Property(x => x.Name).HasMaxLength(150).IsRequired();
                 b.Property(x => x.City).HasMaxLength(70);
-                b.Property(x => x.Description).HasMaxLength(500);
-                b.Property(x => x.Active).HasDefaultValue(true);
-                b.Property(x => x.CreatedAt).HasDefaultValueSql("SYSDATETIME()");
-                b.HasIndex(x => x.Name).IsUnique();
-            });
-
-            builder.Entity<Demandante>(b =>
-            {
-                b.ToTable("Demandante");
-                b.Property(x => x.Name).HasMaxLength(150).IsRequired();
                 b.Property(x => x.Description).HasMaxLength(500);
                 b.Property(x => x.Active).HasDefaultValue(true);
                 b.Property(x => x.CreatedAt).HasDefaultValueSql("SYSDATETIME()");
@@ -161,6 +151,9 @@
                 b.HasMany(x => x.Parties).WithOne(x => x.Case).HasForeignKey(x => x.CaseId).OnDelete(DeleteBehavior.Cascade);
                 b.HasMany(x => x.ProcessStages).WithOne(x => x.Case).HasForeignKey(x => x.CaseId).OnDelete(DeleteBehavior.Cascade);
                 b.HasMany(x => x.ProceduralNotes).WithOne(x => x.Case).HasForeignKey(x => x.CaseId).OnDelete(DeleteBehavior.Cascade);
+
+                b.HasOne(x => x.DemandanteRole).WithMany().HasForeignKey(x => x.DemandanteRoleId).OnDelete(DeleteBehavior.Restrict);
+                b.HasIndex(x => x.DemandanteRoleId);
             });
 
             builder.Entity<CaseParty>(b =>

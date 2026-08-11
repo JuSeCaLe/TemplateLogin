@@ -1,7 +1,12 @@
+using System.Linq.Expressions;
+using System.Security.Claims;
+using Login.Infrastructure.Data.Identity;
 using Login.Infrastructure.Model;
 using Login.Infrastructure.Model.Cases;
+using Login.Infrastructure.Services;
 using Login.WebApi.Controllers.Dto;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -13,12 +18,21 @@ namespace Login.WebApi.Controllers;
 public class CasesController : ControllerBase
 {
     private readonly DataContext _db;
-    public CasesController(DataContext db) => _db = db;
+    private readonly UserManager<AppUser> _userManager;
+    private readonly DemandanteAuthService _demandanteAuthService;
+
+    public CasesController(DataContext db, UserManager<AppUser> userManager, DemandanteAuthService demandanteAuthService)
+    {
+        _db = db;
+        _userManager = userManager;
+        _demandanteAuthService = demandanteAuthService;
+    }
 
     [HttpGet]
     public async Task<ActionResult<IEnumerable<CaseDto>>> GetAll()
     {
-        var cases = await QueryWithIncludes().OrderByDescending(c => c.CreatedAt).ToListAsync();
+        var auth = await GetAuthContextAsync();
+        var cases = await AuthorizedQuery(auth).OrderByDescending(c => c.CreatedAt).ToListAsync();
         return Ok(cases.Select(ToDto));
     }
 
@@ -33,7 +47,8 @@ public class CasesController : ControllerBase
     public async Task<ActionResult<IEnumerable<CaseDto>>> Search([FromQuery] string radicado)
     {
         var term = radicado.Trim();
-        var cases = await QueryWithIncludes()
+        var auth = await GetAuthContextAsync();
+        var cases = await AuthorizedQuery(auth)
             .Where(c => c.Process.Radicado.Contains(term))
             .ToListAsync();
         return Ok(cases.Select(ToDto));
@@ -42,6 +57,10 @@ public class CasesController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<CaseDto>> Create(CreateCaseRequest req)
     {
+        var auth = await GetAuthContextAsync();
+        if (!IsDemandanteAllowed(auth, req.DemandanteRoleId))
+            return Forbid();
+
         var entity = BuildEntity(req);
         _db.Cases.Add(entity);
         await _db.SaveChangesAsync();
@@ -51,6 +70,10 @@ public class CasesController : ControllerBase
     [HttpPut("{id:int}")]
     public async Task<ActionResult<CaseDto>> Update(int id, UpdateCaseRequest req)
     {
+        var auth = await GetAuthContextAsync();
+        if (!IsDemandanteAllowed(auth, req.DemandanteRoleId))
+            return Forbid();
+
         var entity = await FindCase(id);
         if (entity is null) return NotFound();
 
@@ -97,15 +120,94 @@ public class CasesController : ControllerBase
 
     private IQueryable<Case> QueryWithIncludes() =>
         _db.Cases
+            .Include(c => c.DemandanteRole)
             .Include(c => c.Parties)
             .Include(c => c.ProcessStages)
             .Include(c => c.ProceduralNotes);
 
-    private async Task<Case?> FindCase(int id) =>
-        await QueryWithIncludes().FirstOrDefaultAsync(c => c.Id == id);
+    public readonly record struct AuthContext(bool IsAdmin, bool HasAnyDemandanteRole, string[] DemandanteIds);
+
+    // Se resuelve contra la BD en cada request (no contra los claims horneados en
+    // el JWT al loguear) para que activar/desactivar un rol-demandante, o
+    // reasignarlo a un usuario, tenga efecto inmediato sin esperar a un nuevo
+    // login. r-admin sigue viniendo del claim de rol del JWT (igual que en el
+    // resto de los controllers) — solo la restricción por demandante es en vivo.
+    //
+    // HasAnyDemandanteRole distingue "el usuario no tiene ningún rol-demandante
+    // (ej. r-user genérico) => sin restricción" de "tiene uno pero está inactivo
+    // => debe quedar SIN ver ningún caso". Si solo mirásemos si DemandanteIds
+    // quedó vacío no podríamos distinguir ambos casos, y un rol-demandante
+    // desactivado terminaría viendo TODOS los casos en vez de ninguno.
+    private async Task<AuthContext> GetAuthContextAsync()
+    {
+        if (User.IsInRole("r-admin"))
+            return new AuthContext(true, false, Array.Empty<string>());
+
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(userId))
+            return new AuthContext(false, true, Array.Empty<string>());
+
+        var user = await _userManager.FindByIdAsync(userId);
+        if (user is null)
+            return new AuthContext(false, true, Array.Empty<string>());
+
+        var assigned = await _demandanteAuthService.ResolveAssignedDemandanteRolesAsync(user);
+        var activeIds = assigned.Where(d => d.Active).Select(d => d.Id).ToArray();
+
+        return new AuthContext(false, assigned.Count > 0, activeIds);
+    }
+
+    // r-admin ve todos los casos. Un usuario con rol(es)-demandante solo ve los
+    // casos de su(s) rol(es) activos (resuelto en vivo, ver arriba) — si todos
+    // sus roles-demandante están inactivos, no ve ningún caso. Un usuario sin
+    // ningún rol-demandante (ej. r-user genérico) no se filtra, preservando el
+    // comportamiento previo para staff interno.
+    private IQueryable<Case> AuthorizedQuery(AuthContext auth)
+    {
+        var query = QueryWithIncludes();
+
+        if (auth.IsAdmin || !auth.HasAnyDemandanteRole)
+            return query;
+
+        if (auth.DemandanteIds.Length == 0)
+            return query.Where(c => false);
+
+        return query.Where(BuildDemandanteFilter(auth.DemandanteIds));
+    }
+
+    // OR explícito (en vez de demandanteIds.Contains(c.DemandanteRoleId)) por
+    // consistencia con el resto del código — demandanteIds es siempre un
+    // conjunto pequeño (1-2 elementos en la práctica).
+    private static Expression<Func<Case, bool>> BuildDemandanteFilter(string[] demandanteIds)
+    {
+        var param = Expression.Parameter(typeof(Case), "c");
+        var prop = Expression.Property(param, nameof(Case.DemandanteRoleId));
+
+        Expression? body = null;
+        foreach (var id in demandanteIds)
+        {
+            var eq = Expression.Equal(prop, Expression.Constant(id));
+            body = body is null ? eq : Expression.OrElse(body, eq);
+        }
+
+        return Expression.Lambda<Func<Case, bool>>(body!, param);
+    }
+
+    private static bool IsDemandanteAllowed(AuthContext auth, string demandanteRoleId)
+    {
+        if (auth.IsAdmin || !auth.HasAnyDemandanteRole) return true; // admin o ej. r-user genérico, sin restricción
+        return auth.DemandanteIds.Contains(demandanteRoleId);
+    }
+
+    private async Task<Case?> FindCase(int id)
+    {
+        var auth = await GetAuthContextAsync();
+        return await AuthorizedQuery(auth).FirstOrDefaultAsync(c => c.Id == id);
+    }
 
     private static Case BuildEntity(CreateCaseRequest req) => new()
     {
+        DemandanteRoleId = req.DemandanteRoleId,
         Process = MapProcess(req.Process),
         FinancialInfo = MapFinancial(req.FinancialInfo),
         Measures = MapMeasures(req.Measures),
@@ -117,6 +219,8 @@ public class CasesController : ControllerBase
 
     private static void ApplyUpdate(Case entity, UpdateCaseRequest req)
     {
+        entity.DemandanteRoleId = req.DemandanteRoleId;
+
         entity.Process.Radicado = req.Process.Radicado.Trim();
         entity.Process.ProcessType = req.Process.ProcessType.Trim();
         entity.Process.Court = req.Process.Court.Trim();
@@ -161,6 +265,8 @@ public class CasesController : ControllerBase
     private static CaseDto ToDto(Case c) => new(
         c.Id,
         c.CreatedAt.ToString("yyyy-MM-dd"),
+        c.DemandanteRoleId,
+        c.DemandanteRole?.Name,
         new ProcessInfoDto(c.Process.Radicado, c.Process.ProcessType, c.Process.Court, c.Process.City),
         c.Parties.Select(p => new PartyInfoDto(p.Person, p.ProcessRole)).ToList(),
         c.FinancialInfo is null ? null : new FinancialInfoDto(c.FinancialInfo.Capital, c.FinancialInfo.Obligations, c.FinancialInfo.FngFag),

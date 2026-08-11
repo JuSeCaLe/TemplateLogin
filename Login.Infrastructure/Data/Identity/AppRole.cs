@@ -12,5 +12,9 @@ namespace Login.Infrastructure.Data.Identity
         public string? Description { get; set; }
         public bool Active { get; set; } = true;
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+        // Un rol marcado como demandante restringe a los usuarios que lo tengan
+        // a ver solo los Case cuyo DemandanteRoleId sea este rol.
+        public bool IsDemandante { get; set; } = false;
     }
 }
