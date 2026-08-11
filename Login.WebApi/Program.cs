@@ -53,15 +53,15 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 builder.Services.AddDbContext<DataContext>(options =>
-    options.UseSqlServer(
+    options.UseNpgsql(
         connectionString,
-        sqlOptions =>
+        npgsqlOptions =>
         {
-            sqlOptions.MigrationsAssembly("Login.Infrastructure");
-            sqlOptions.EnableRetryOnFailure(
+            npgsqlOptions.MigrationsAssembly("Login.Infrastructure");
+            npgsqlOptions.EnableRetryOnFailure(
                 maxRetryCount: 5,
                 maxRetryDelay: TimeSpan.FromSeconds(10),
-                errorNumbersToAdd: null);
+                errorCodesToAdd: null);
         }));
 builder.Services.AddCors(options =>
 {
