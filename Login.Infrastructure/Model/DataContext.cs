@@ -35,14 +35,14 @@
             {
                 b.Property(r => r.Description).HasMaxLength(250);
                 b.Property(r => r.Active).HasDefaultValue(true);
-                b.Property(r => r.CreatedAt).HasDefaultValueSql("now()");
+                b.Property(r => r.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
                 b.Property(r => r.IsDemandante).HasDefaultValue(false);
             });
 
             builder.Entity<AppUser>(b =>
             {
                 b.Property(u => u.Active).HasDefaultValue(true);
-                b.Property(u => u.CreatedAt).HasDefaultValueSql("now()");
+                b.Property(u => u.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
             });
 
             builder.Entity<TipoObligacion>(b =>
@@ -51,7 +51,7 @@
                 b.Property(x => x.Name).HasMaxLength(150).IsRequired();
                 b.Property(x => x.Description).HasMaxLength(500);
                 b.Property(x => x.Active).HasDefaultValue(true);
-                b.Property(x => x.CreatedAt).HasDefaultValueSql("now()");
+                b.Property(x => x.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
                 b.HasIndex(x => x.Name).IsUnique();
             });
 
@@ -61,7 +61,7 @@
                 b.Property(x => x.Name).HasMaxLength(150).IsRequired();
                 b.Property(x => x.Description).HasMaxLength(500);
                 b.Property(x => x.Active).HasDefaultValue(true);
-                b.Property(x => x.CreatedAt).HasDefaultValueSql("now()");
+                b.Property(x => x.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
                 b.HasIndex(x => x.Name).IsUnique();
             });
 
@@ -72,7 +72,7 @@
                 b.Property(x => x.City).HasMaxLength(70);
                 b.Property(x => x.Description).HasMaxLength(500);
                 b.Property(x => x.Active).HasDefaultValue(true);
-                b.Property(x => x.CreatedAt).HasDefaultValueSql("now()");
+                b.Property(x => x.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
                 b.HasIndex(x => x.Name).IsUnique();
             });
 
@@ -99,7 +99,7 @@
             builder.Entity<Case>(b =>
             {
                 b.ToTable("Case");
-                b.Property(x => x.CreatedAt).HasDefaultValueSql("now()");
+                b.Property(x => x.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
 
                 b.OwnsOne(x => x.Process, p =>
                 {

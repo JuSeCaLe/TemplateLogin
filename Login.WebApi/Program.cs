@@ -53,15 +53,16 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 builder.Services.AddDbContext<DataContext>(options =>
-    options.UseNpgsql(
+    options.UseMySql(
         connectionString,
-        npgsqlOptions =>
+        new MariaDbServerVersion(new Version(10, 6, 20)),
+        mysqlOptions =>
         {
-            npgsqlOptions.MigrationsAssembly("Login.Infrastructure");
-            npgsqlOptions.EnableRetryOnFailure(
+            mysqlOptions.MigrationsAssembly("Login.Infrastructure");
+            mysqlOptions.EnableRetryOnFailure(
                 maxRetryCount: 5,
                 maxRetryDelay: TimeSpan.FromSeconds(10),
-                errorCodesToAdd: null);
+                errorNumbersToAdd: null);
         }));
 builder.Services.AddCors(options =>
 {
