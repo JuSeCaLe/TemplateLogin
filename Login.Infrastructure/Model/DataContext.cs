@@ -19,6 +19,7 @@
         public DbSet<Juzgado> Juzgado => Set<Juzgado>();
 
         public DbSet<Case> Cases => Set<Case>();
+        public DbSet<GoogleDriveConnection> GoogleDriveConnections => Set<GoogleDriveConnection>();
         public DbSet<CaseParty> CaseParties => Set<CaseParty>();
         public DbSet<CaseProcessStage> CaseProcessStages => Set<CaseProcessStage>();
         public DbSet<CaseProceduralNote> CaseProceduralNotes => Set<CaseProceduralNote>();
@@ -181,6 +182,17 @@
                 b.ToTable("CaseProceduralNote");
                 b.Property(x => x.CreatedAt).HasMaxLength(10).IsRequired();
                 b.Property(x => x.Text).HasMaxLength(2000).IsRequired();
+            });
+
+            // Fila única (ver GoogleDriveConnection): la cuenta de Google
+            // conectada por un admin, usada para todos los documentos de todos
+            // los casos sin importar qué usuario de la App los suba.
+            builder.Entity<GoogleDriveConnection>(b =>
+            {
+                b.ToTable("GoogleDriveConnection");
+                b.Property(x => x.RefreshToken).HasMaxLength(512).IsRequired();
+                b.Property(x => x.ConnectedEmail).HasMaxLength(256);
+                b.Property(x => x.RootFolderId).HasMaxLength(200);
             });
         }
     }

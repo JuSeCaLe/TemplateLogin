@@ -210,7 +210,7 @@ public class CasesController : ControllerBase
     [HttpPost("{id:int}/drive-folder")]
     public async Task<ActionResult<DriveFolderDto>> CreateDriveFolder(int id)
     {
-        if (!_drive.IsConfigured)
+        if (!await _drive.IsReadyAsync())
             return Problem("La integración con Google Drive no está configurada.", statusCode: StatusCodes.Status503ServiceUnavailable);
 
         var entity = await FindCase(id);
@@ -236,7 +236,7 @@ public class CasesController : ControllerBase
         if (string.IsNullOrWhiteSpace(entity.DriveFolderId))
             return Ok(Array.Empty<DriveFileDto>());
 
-        if (!_drive.IsConfigured)
+        if (!await _drive.IsReadyAsync())
             return Problem("La integración con Google Drive no está configurada.", statusCode: StatusCodes.Status503ServiceUnavailable);
 
         var files = await _drive.ListFilesAsync(entity.DriveFolderId);
@@ -249,7 +249,7 @@ public class CasesController : ControllerBase
     [RequestSizeLimit(50_000_000)]
     public async Task<ActionResult<DriveFileDto>> UploadDriveFile(int id, IFormFile file)
     {
-        if (!_drive.IsConfigured)
+        if (!await _drive.IsReadyAsync())
             return Problem("La integración con Google Drive no está configurada.", statusCode: StatusCodes.Status503ServiceUnavailable);
 
         if (file is null || file.Length == 0)

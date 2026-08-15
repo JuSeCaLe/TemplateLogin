@@ -105,7 +105,9 @@ builder.Services
 builder.Services.AddScoped<DemandanteAuthService>();
 
 builder.Services.Configure<GoogleDriveOptions>(builder.Configuration.GetSection("GoogleDrive"));
-builder.Services.AddSingleton<GoogleDriveService>();
+// Scoped (no Singleton): ahora depende de DataContext, que es Scoped.
+builder.Services.AddScoped<GoogleDriveService>();
+builder.Services.AddMemoryCache();
 
 
 var app = builder.Build();
