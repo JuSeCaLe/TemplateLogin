@@ -104,6 +104,9 @@ builder.Services
 
 builder.Services.AddScoped<DemandanteAuthService>();
 
+builder.Services.Configure<GoogleDriveOptions>(builder.Configuration.GetSection("GoogleDrive"));
+builder.Services.AddSingleton<GoogleDriveService>();
+
 
 var app = builder.Build();
 

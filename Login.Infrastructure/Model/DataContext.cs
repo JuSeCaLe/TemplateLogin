@@ -100,6 +100,7 @@
             {
                 b.ToTable("Case");
                 b.Property(x => x.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                b.Property(x => x.DriveFolderId).HasMaxLength(200);
 
                 b.OwnsOne(x => x.Process, p =>
                 {

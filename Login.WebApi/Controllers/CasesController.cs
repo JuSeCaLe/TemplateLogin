@@ -21,12 +21,14 @@ public class CasesController : ControllerBase
     private readonly DataContext _db;
     private readonly UserManager<AppUser> _userManager;
     private readonly DemandanteAuthService _demandanteAuthService;
+    private readonly GoogleDriveService _drive;
 
-    public CasesController(DataContext db, UserManager<AppUser> userManager, DemandanteAuthService demandanteAuthService)
+    public CasesController(DataContext db, UserManager<AppUser> userManager, DemandanteAuthService demandanteAuthService, GoogleDriveService drive)
     {
         _db = db;
         _userManager = userManager;
         _demandanteAuthService = demandanteAuthService;
+        _drive = drive;
     }
 
     [HttpGet]
@@ -201,6 +203,91 @@ public class CasesController : ControllerBase
         return Ok(ToDto(entity));
     }
 
+    // ── Documentos (Google Drive) ────────────────────────────────────────
+
+    // Crea (si no existe) la subcarpeta de Drive del caso y devuelve su id/url.
+    // Idempotente: si ya tiene carpeta, solo la devuelve.
+    [HttpPost("{id:int}/drive-folder")]
+    public async Task<ActionResult<DriveFolderDto>> CreateDriveFolder(int id)
+    {
+        if (!_drive.IsConfigured)
+            return Problem("La integración con Google Drive no está configurada.", statusCode: StatusCodes.Status503ServiceUnavailable);
+
+        var entity = await FindCase(id);
+        if (entity is null) return NotFound();
+
+        try
+        {
+            await EnsureDriveFolderAsync(entity);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Problem(ex.Message, statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+
+        return Ok(new DriveFolderDto(entity.DriveFolderId!, DriveFolderUrl(entity.DriveFolderId!)));
+    }
+
+    [HttpGet("{id:int}/drive-files")]
+    public async Task<ActionResult<IEnumerable<DriveFileDto>>> GetDriveFiles(int id)
+    {
+        var entity = await FindCase(id);
+        if (entity is null) return NotFound();
+        if (string.IsNullOrWhiteSpace(entity.DriveFolderId))
+            return Ok(Array.Empty<DriveFileDto>());
+
+        if (!_drive.IsConfigured)
+            return Problem("La integración con Google Drive no está configurada.", statusCode: StatusCodes.Status503ServiceUnavailable);
+
+        var files = await _drive.ListFilesAsync(entity.DriveFolderId);
+        return Ok(files.Select(f => new DriveFileDto(f.Id, f.Name, f.MimeType, f.WebViewLink, f.CreatedAt, f.Size)));
+    }
+
+    // Crea la carpeta del caso si aún no existe (primer documento) y sube el
+    // archivo ahí. Límite generoso pero evita subidas descontroladas.
+    [HttpPost("{id:int}/drive-files")]
+    [RequestSizeLimit(50_000_000)]
+    public async Task<ActionResult<DriveFileDto>> UploadDriveFile(int id, IFormFile file)
+    {
+        if (!_drive.IsConfigured)
+            return Problem("La integración con Google Drive no está configurada.", statusCode: StatusCodes.Status503ServiceUnavailable);
+
+        if (file is null || file.Length == 0)
+            return BadRequest(new { message = "Archivo requerido" });
+
+        var entity = await FindCase(id);
+        if (entity is null) return NotFound();
+
+        try
+        {
+            await EnsureDriveFolderAsync(entity);
+
+            await using var stream = file.OpenReadStream();
+            var uploaded = await _drive.UploadFileAsync(entity.DriveFolderId!, file.FileName, file.ContentType, stream);
+
+            return Ok(new DriveFileDto(uploaded.Id, uploaded.Name, uploaded.MimeType, uploaded.WebViewLink, uploaded.CreatedAt, uploaded.Size));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Problem(ex.Message, statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+    }
+
+    private async Task EnsureDriveFolderAsync(Case entity)
+    {
+        if (!string.IsNullOrWhiteSpace(entity.DriveFolderId)) return;
+
+        var defendant = entity.Parties.FirstOrDefault(p => p.ProcessRole == "DEMANDADO");
+        var defendantName = defendant?.Person?.Split('|').FirstOrDefault()?.Trim();
+        var label = !string.IsNullOrWhiteSpace(entity.Process.Radicado) ? entity.Process.Radicado : $"Caso-{entity.Id}";
+        var folderName = string.IsNullOrWhiteSpace(defendantName) ? label : $"{label} - {defendantName}";
+
+        entity.DriveFolderId = await _drive.CreateCaseFolderAsync(folderName);
+        await _db.SaveChangesAsync();
+    }
+
+    private static string DriveFolderUrl(string folderId) => $"https://drive.google.com/drive/folders/{folderId}";
+
     // ── helpers ───────────────────────────────────────────────────────────
 
     private IQueryable<Case> QueryWithIncludes() =>
@@ -354,6 +441,8 @@ public class CasesController : ControllerBase
         c.CreatedAt.ToString("yyyy-MM-dd"),
         c.DemandanteRoleId,
         c.DemandanteRole?.Name,
+        c.DriveFolderId,
+        c.DriveFolderId is null ? null : DriveFolderUrl(c.DriveFolderId),
         new ProcessInfoDto(c.Process.Radicado, c.Process.ProcessType, c.Process.Court, c.Process.City, c.Process.FiledAt),
         c.Parties.Select(p => new PartyInfoDto(p.Person, p.ProcessRole)).ToList(),
         c.FinancialInfo is null ? null : new FinancialInfoDto(c.FinancialInfo.Capital, c.FinancialInfo.Obligations, c.FinancialInfo.FngFag),

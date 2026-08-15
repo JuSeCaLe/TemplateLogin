@@ -10,11 +10,16 @@ public record ClosureInfoDto(string? TerminationDate, string? TerminationReason,
 public record ProcessStageDto(int Id, string CreatedAt, string StageName, string SubStageName, string? Observation);
 public record ProceduralNoteDto(int Id, string CreatedAt, string Text);
 
+public record DriveFolderDto(string Id, string Url);
+public record DriveFileDto(string Id, string Name, string? MimeType, string? WebViewLink, DateTime? CreatedAt, long? Size);
+
 public record CaseDto(
     int Id,
     string CreatedAt,
     string DemandanteRoleId,
     string? DemandanteRoleName,
+    string? DriveFolderId,
+    string? DriveFolderUrl,
     ProcessInfoDto Process,
     List<PartyInfoDto> PartiesInfo,
     FinancialInfoDto? FinancialInfo,

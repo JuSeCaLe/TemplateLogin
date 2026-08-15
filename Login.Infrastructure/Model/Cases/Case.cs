@@ -10,6 +10,10 @@ public class Case
     public string DemandanteRoleId { get; set; } = null!;
     public AppRole DemandanteRole { get; set; } = null!;
 
+    // Carpeta de Google Drive del caso (creada por la app, no editable a
+    // mano). Null hasta que se crea la carpeta desde CaseEdit.
+    public string? DriveFolderId { get; set; }
+
     public CaseProcess Process { get; set; } = new();
     public CaseFinancial? FinancialInfo { get; set; }
     public CaseMeasures? Measures { get; set; }
