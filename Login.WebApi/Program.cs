@@ -11,6 +11,11 @@ using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Sin efecto si se corre como consola (dev); si el proceso lo lanza el SCM
+// de Windows (instalación local vía Servicio de Windows), lo hace correr
+// correctamente como servicio en vez de fallar al no tener consola.
+builder.Host.UseWindowsService();
+
 var corsAllowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Value?.
     Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
     ?? Array.Empty<string>();
@@ -118,13 +123,27 @@ var app = builder.Build();
     app.UseSwagger();
     app.UseSwaggerUI();
 //}
+
+// Sirve el build de Angular (wwwroot) cuando existe — instalación local vía
+// Servicio de Windows, un solo proceso para API + frontend. No afecta el
+// despliegue normal (API + Static Web App separados): sin wwwroot poblado,
+// estas líneas simplemente no encuentran nada que servir.
+app.UseDefaultFiles();
+app.UseStaticFiles();
+
 app.UseRouting();
 app.UseCors();
-app.UseHttpsRedirection();
+// Sin redirección forzada a HTTPS: la instalación local escucha solo en
+// http://localhost (ver appsettings.Production.json), sin certificado.
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+
+// Fallback SPA: cualquier ruta que no sea /api/* ni un archivo estático
+// (ej. /cases/5/edit recargada con F5) sirve index.html y Angular Router
+// toma el control. Si no hay wwwroot poblado, MapFallbackToFile no interfiere.
+app.MapFallbackToFile("index.html");
 
 using (var scope = app.Services.CreateScope())
 {
