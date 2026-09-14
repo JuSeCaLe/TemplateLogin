@@ -187,6 +187,41 @@ public class CasesController : ControllerBase
         return Ok(ToDto(entity));
     }
 
+    [HttpPut("{id:int}/stages/{stageId:int}")]
+    public async Task<ActionResult<CaseDto>> UpdateStage(int id, int stageId, UpdateProcessStageRequest req)
+    {
+        var entity = await FindCase(id);
+        if (entity is null) return NotFound();
+
+        var stage = entity.ProcessStages.FirstOrDefault(s => s.Id == stageId);
+        if (stage is null) return NotFound();
+
+        stage.CreatedAt = req.StageDate ?? stage.CreatedAt;
+        stage.StageName = req.StageName.Trim();
+        stage.SubStageName = req.SubStageName?.Trim() ?? "";
+        stage.Observation = req.Observation?.Trim();
+
+        await _db.SaveChangesAsync();
+        return Ok(ToDto(entity));
+    }
+
+    [HttpDelete("{id:int}/stages/{stageId:int}")]
+    public async Task<ActionResult<CaseDto>> DeleteStage(int id, int stageId)
+    {
+        var entity = await FindCase(id);
+        if (entity is null) return NotFound();
+
+        var stage = entity.ProcessStages.FirstOrDefault(s => s.Id == stageId);
+        if (stage is null) return NotFound();
+
+        // Igual criterio que ApplyUpdate con Parties: al quitarla de la
+        // colección de una relación requerida (CaseId no-nulo), EF Core la
+        // marca para borrar en vez de intentar dejar la FK en null.
+        entity.ProcessStages.Remove(stage);
+        await _db.SaveChangesAsync();
+        return Ok(ToDto(entity));
+    }
+
     [HttpPost("{id:int}/notes")]
     public async Task<ActionResult<CaseDto>> AddNote(int id, AddProceduralNoteRequest req)
     {

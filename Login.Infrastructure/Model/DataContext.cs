@@ -20,6 +20,7 @@
 
         public DbSet<Case> Cases => Set<Case>();
         public DbSet<GoogleDriveConnection> GoogleDriveConnections => Set<GoogleDriveConnection>();
+        public DbSet<MemorialTemplate> MemorialTemplates => Set<MemorialTemplate>();
         public DbSet<CaseParty> CaseParties => Set<CaseParty>();
         public DbSet<CaseProcessStage> CaseProcessStages => Set<CaseProcessStage>();
         public DbSet<CaseProceduralNote> CaseProceduralNotes => Set<CaseProceduralNote>();
@@ -193,6 +194,14 @@
                 b.Property(x => x.RefreshToken).HasMaxLength(512).IsRequired();
                 b.Property(x => x.ConnectedEmail).HasMaxLength(256);
                 b.Property(x => x.RootFolderId).HasMaxLength(200);
+            });
+
+            builder.Entity<MemorialTemplate>(b =>
+            {
+                b.ToTable("MemorialTemplate");
+                b.Property(x => x.Name).HasMaxLength(200).IsRequired();
+                b.Property(x => x.FileName).HasMaxLength(260).IsRequired();
+                b.HasIndex(x => x.Name).IsUnique();
             });
         }
     }

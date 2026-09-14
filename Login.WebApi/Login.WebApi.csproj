@@ -25,4 +25,12 @@
     <ProjectReference Include="..\Login.Infrastructure\Login.Infrastructure.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Plantillas .docx de memoriales: se copian al build/publish (Debug y
+         Release) para que el motor de generación las encuentre en runtime. -->
+    <Content Include="Templates\Memoriales\**\*.docx">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
 </Project>

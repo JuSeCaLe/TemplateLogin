@@ -75,7 +75,10 @@ builder.Services.AddCors(options =>
         policy => policy
             .WithOrigins(corsAllowedOrigins)
             .AllowAnyHeader()
-            .AllowAnyMethod());
+            .AllowAnyMethod()
+            // Sin esto el frontend no puede leer el nombre de archivo
+            // sugerido (memoriales, export a Excel) en peticiones cross-origin.
+            .WithExposedHeaders("Content-Disposition"));
 });
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).
     AddJwtBearer(options =>
@@ -113,6 +116,8 @@ builder.Services.Configure<GoogleDriveOptions>(builder.Configuration.GetSection(
 // Scoped (no Singleton): ahora depende de DataContext, que es Scoped.
 builder.Services.AddScoped<GoogleDriveService>();
 builder.Services.AddMemoryCache();
+
+builder.Services.AddSingleton<MemorialGenerationService>();
 
 
 var app = builder.Build();
@@ -343,6 +348,44 @@ using (var scope = app.Services.CreateScope())
         }
 
         await CatalogSeeder.SeedAsync(db);
+
+        // Plantillas de memoriales (.docx con placeholders) — ver
+        // Templates/Memoriales y MemorialGenerationService.
+        (string FileName, string Name)[] memorialTemplates =
+        [
+            ("ACEPTA CURADURIA.docx", "Acepta curaduría"),
+            ("APORTO AVALUO COMERCIAL.docx", "Aporto avalúo comercial"),
+            ("APORTO LIQUIDACION DE CREDITO.docx", "Aporto liquidación de crédito"),
+            ("MEMORIAL SEGUIR ADELANTE SINGULAR .docx", "Memorial seguir adelante (singular)"),
+            ("MODELO.docx", "Modelo genérico"),
+            ("REPORTE TITULOS JUDICIALES.docx", "Reporte títulos judiciales"),
+            ("SOLICITO DAR TRAMITE .docx", "Solicito dar trámite"),
+            ("SOLICITO DEVOLUCION DESPACHO COMISORIO.docx", "Solicito devolución despacho comisorio"),
+            ("SOLICITO EMBARGO BILLETERAS.docx", "Solicito embargo billeteras digitales"),
+            ("SOLICITO EMBARGO COOPERATIVAS.docx", "Solicito embargo cooperativas"),
+            ("SOLICITO EMBARGO VEHICULO.docx", "Solicito embargo vehículo"),
+            ("SOLICITO FECHA REMATE.docx", "Solicito fecha de remate"),
+            ("SOLICITO LIBRAR MANDAMIENTO Y RADICADO.docx", "Solicito librar mandamiento y radicado"),
+            ("SOLICITO REPROGRAMAR AUDIENCIA.docx", "Solicito reprogramar audiencia"),
+            ("SOLICITO TERMINACION PAGO TOTAL.docx", "Solicito terminación por pago total"),
+            ("SUBSANACION DEMANDA.docx", "Subsanación de demanda"),
+            ("TERMINACIÓN POR NORMALIZACIÓN.docx", "Terminación por normalización"),
+        ];
+
+        foreach (var (fileName, name) in memorialTemplates)
+        {
+            if (!await db.MemorialTemplates.AnyAsync(x => x.FileName == fileName))
+            {
+                db.MemorialTemplates.Add(new MemorialTemplate
+                {
+                    Name = name,
+                    FileName = fileName,
+                    Active = true,
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+        }
+        await db.SaveChangesAsync();
     }
     catch (Exception ex)
     {

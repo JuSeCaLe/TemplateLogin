@@ -54,4 +54,5 @@ public record UpdateCaseRequest(
 );
 
 public record AddProcessStageRequest(string? StageDate, string StageName, string? SubStageName, string? Observation);
+public record UpdateProcessStageRequest(string? StageDate, string StageName, string? SubStageName, string? Observation);
 public record AddProceduralNoteRequest(string Text);
