@@ -2,7 +2,7 @@ namespace Login.WebApi.Controllers.Dto;
 
 public record ProcessInfoDto(string Radicado, string ProcessType, string Court, string City, string? FiledAt = null);
 public record PartyInfoDto(string Person, string ProcessRole);
-public record FinancialInfoDto(decimal? Capital, string? Obligations, bool FngFag);
+public record FinancialInfoDto(decimal? Capital, string? Obligations, bool FngFag, bool PaymentAgreement, bool PortfolioSale);
 public record MeasuresInfoDto(bool Embargo, string? EmbargoDate, bool RemanentEmbargo, string? RemanentEntity);
 public record StagesInfoDto(bool PaymentOrder, bool PersonalNotification, string? PersonalNotificationDate, bool FirstInstanceSentence, string? FirstInstanceDate, bool SecondInstance, string? SecondInstanceDate);
 public record AuctionInfoDto(string? AppraisalStatus, string? AppraisalDate, decimal? AppraisalValue, string? AuctionStatus, string? AuctionDate, bool? Awarded, string? AwardDate);
@@ -11,13 +11,14 @@ public record ProcessStageDto(int Id, string CreatedAt, string StageName, string
 public record ProceduralNoteDto(int Id, string CreatedAt, string Text);
 
 public record DriveFolderDto(string Id, string Url);
-public record DriveFileDto(string Id, string Name, string? MimeType, string? WebViewLink, DateTime? CreatedAt, long? Size);
+public record DriveFileDto(string Id, string Name, string? MimeType, string? WebViewLink, DateTime? CreatedAt, long? Size, string? DocumentType);
 
 public record CaseDto(
     int Id,
     string CreatedAt,
     string DemandanteRoleId,
     string? DemandanteRoleName,
+    string? FolderNumber,
     string? DriveFolderId,
     string? DriveFolderUrl,
     ProcessInfoDto Process,
@@ -33,6 +34,7 @@ public record CaseDto(
 
 public record CreateCaseRequest(
     string DemandanteRoleId,
+    string? FolderNumber,
     ProcessInfoDto Process,
     List<PartyInfoDto> PartiesInfo,
     FinancialInfoDto? FinancialInfo,

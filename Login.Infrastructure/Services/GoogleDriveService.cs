@@ -19,7 +19,7 @@ public class GoogleDriveOptions
     public string? OAuthClientSecret { get; set; }
 }
 
-public record DriveFileInfo(string Id, string Name, string? MimeType, string? WebViewLink, DateTime? CreatedAt, long? Size);
+public record DriveFileInfo(string Id, string Name, string? MimeType, string? WebViewLink, DateTime? CreatedAt, long? Size, string? DocumentType);
 
 // Envuelve la Google Drive API v3, usando el refresh_token de la única
 // cuenta de Google conectada (ver GoogleDriveConnection) en vez de una
@@ -168,38 +168,59 @@ public class GoogleDriveService
         return folder.Id;
     }
 
+    // Clave de la property privada (ver docs de Drive API) donde se guarda el
+    // tipo de documento elegido al subir el archivo (Auto / Providencia /
+    // Memoriales u otros) — no hay una columna nuestra para esto, viaja en
+    // el propio archivo de Drive.
+    private const string DocumentTypePropertyKey = "documentType";
+
     public async Task<IReadOnlyList<DriveFileInfo>> ListFilesAsync(string folderId, CancellationToken ct = default)
     {
         var client = await GetClientAsync(ct);
         var request = client.Files.List();
         request.Q = $"'{folderId}' in parents and trashed = false";
-        request.Fields = "files(id, name, mimeType, webViewLink, createdTime, size)";
+        request.Fields = "files(id, name, mimeType, webViewLink, createdTime, size, properties)";
         request.OrderBy = "createdTime desc";
 
         var result = await request.ExecuteAsync(ct);
         return result.Files
-            .Select(f => new DriveFileInfo(f.Id, f.Name, f.MimeType, f.WebViewLink, f.CreatedTimeDateTimeOffset?.UtcDateTime, f.Size))
+            .Select(f => new DriveFileInfo(
+                f.Id, f.Name, f.MimeType, f.WebViewLink, f.CreatedTimeDateTimeOffset?.UtcDateTime, f.Size,
+                f.Properties is not null && f.Properties.TryGetValue(DocumentTypePropertyKey, out var dt) ? dt : null))
             .ToList();
     }
 
-    public async Task<DriveFileInfo> UploadFileAsync(string folderId, string fileName, string contentType, Stream content, CancellationToken ct = default)
+    public async Task<DriveFileInfo> UploadFileAsync(string folderId, string fileName, string contentType, Stream content, string? documentType, CancellationToken ct = default)
     {
         var client = await GetClientAsync(ct);
         var metadata = new DriveFile
         {
             Name = fileName,
-            Parents = [folderId]
+            Parents = [folderId],
+            Properties = string.IsNullOrWhiteSpace(documentType)
+                ? null
+                : new Dictionary<string, string> { [DocumentTypePropertyKey] = documentType }
         };
 
         var request = client.Files.Create(metadata, content, contentType);
-        request.Fields = "id, name, mimeType, webViewLink, createdTime, size";
+        request.Fields = "id, name, mimeType, webViewLink, createdTime, size, properties";
 
         var progress = await request.UploadAsync(ct);
         if (progress.Status != UploadStatus.Completed)
             throw new InvalidOperationException($"Error subiendo archivo a Drive: {progress.Exception?.Message}");
 
         var f = request.ResponseBody;
-        return new DriveFileInfo(f.Id, f.Name, f.MimeType, f.WebViewLink, f.CreatedTimeDateTimeOffset?.UtcDateTime, f.Size);
+        return new DriveFileInfo(f.Id, f.Name, f.MimeType, f.WebViewLink, f.CreatedTimeDateTimeOffset?.UtcDateTime, f.Size, documentType);
+    }
+
+    // Manda el archivo a la papelera de Drive (recuperable ~30 días) en vez
+    // de borrarlo permanente — solo la llama un admin (ver CasesController).
+    public async Task TrashFileAsync(string fileId, CancellationToken ct = default)
+    {
+        var client = await GetClientAsync(ct);
+        var request = client.Files.Update(new DriveFile { Trashed = true }, fileId);
+        request.Fields = "id";
+        await request.ExecuteAsync(ct);
     }
 
     // ── internals ────────────────────────────────────────────────────────

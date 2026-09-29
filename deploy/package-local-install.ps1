@@ -44,7 +44,7 @@ $wwwroot = "$publishDir\wwwroot"
 New-Item -ItemType Directory -Force -Path $wwwroot | Out-Null
 Copy-Item "$frontendRoot\dist\Aboga2\browser\*" $wwwroot -Recurse -Force
 
-Write-Host "=== 4/5 Inyectar cadena de conexion real (solo en el publish) ===" -ForegroundColor Cyan
+Write-Host "=== 4/5 Inyectar secretos reales (solo en el publish) ===" -ForegroundColor Cyan
 if (-not (Test-Path $secretsPath)) {
     throw "No se encontraron user-secrets en $secretsPath. Configura ConnectionStrings:DefaultConection primero."
 }
@@ -53,12 +53,27 @@ $connString = $secrets.'ConnectionStrings:DefaultConection'
 if ([string]::IsNullOrWhiteSpace($connString)) {
     throw "ConnectionStrings:DefaultConection esta vacio en user-secrets."
 }
+$gdriveClientId = $secrets.'GoogleDrive:OAuthClientId'
+$gdriveClientSecret = $secrets.'GoogleDrive:OAuthClientSecret'
+if ([string]::IsNullOrWhiteSpace($gdriveClientId) -or [string]::IsNullOrWhiteSpace($gdriveClientSecret)) {
+    throw "GoogleDrive:OAuthClientId / OAuthClientSecret estan vacios en user-secrets."
+}
 
 $prodSettingsPath = "$publishDir\appsettings.Production.json"
 $prodSettings = Get-Content -Raw $prodSettingsPath | ConvertFrom-Json
 $prodSettings | Add-Member -NotePropertyName "ConnectionStrings" -NotePropertyValue ([ordered]@{ DefaultConection = $connString }) -Force
+# FrontendRedirectUrl fijo a localhost:8090: en esta instalación local el
+# mismo Kestrel sirve backend y frontend (Angular queda en wwwroot), a
+# diferencia de appsettings.json (dev) que apunta a localhost:4200. El
+# redirect_uri real (".../api/googledrive/oauth/callback") también debe estar
+# registrado como "Authorized redirect URI" en Google Cloud Console.
+$prodSettings | Add-Member -NotePropertyName "GoogleDrive" -NotePropertyValue ([ordered]@{
+    OAuthClientId       = $gdriveClientId
+    OAuthClientSecret   = $gdriveClientSecret
+    FrontendRedirectUrl = "http://localhost:8090/security/google-drive"
+}) -Force
 $prodSettings | ConvertTo-Json -Depth 10 | Set-Content -Path $prodSettingsPath -Encoding UTF8
-Write-Host "  Cadena de conexion inyectada (longitud $($connString.Length) chars)."
+Write-Host "  Cadena de conexion y credenciales de Google Drive inyectadas."
 
 Write-Host "=== 5/5 Compilar instalador con Inno Setup ===" -ForegroundColor Cyan
 if (-not (Test-Path $innoCompiler)) { throw "No se encontro ISCC.exe en $innoCompiler" }

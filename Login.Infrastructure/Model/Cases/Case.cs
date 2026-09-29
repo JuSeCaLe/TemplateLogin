@@ -10,6 +10,11 @@ public class Case
     public string DemandanteRoleId { get; set; } = null!;
     public AppRole DemandanteRole { get; set; } = null!;
 
+    // Número de carpeta física del despacho. Solo se fija al crear el caso
+    // (CreateCaseRequest) — UpdateCaseRequest no lo incluye a propósito, así
+    // que no hay forma de cambiarlo después desde la API.
+    public string? FolderNumber { get; set; }
+
     // Carpeta de Google Drive del caso (creada por la app, no editable a
     // mano). Null hasta que se crea la carpeta desde CaseEdit.
     public string? DriveFolderId { get; set; }

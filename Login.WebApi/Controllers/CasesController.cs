@@ -275,20 +275,25 @@ public class CasesController : ControllerBase
             return Problem("La integración con Google Drive no está configurada.", statusCode: StatusCodes.Status503ServiceUnavailable);
 
         var files = await _drive.ListFilesAsync(entity.DriveFolderId);
-        return Ok(files.Select(f => new DriveFileDto(f.Id, f.Name, f.MimeType, f.WebViewLink, f.CreatedAt, f.Size)));
+        return Ok(files.Select(f => new DriveFileDto(f.Id, f.Name, f.MimeType, f.WebViewLink, f.CreatedAt, f.Size, f.DocumentType)));
     }
 
     // Crea la carpeta del caso si aún no existe (primer documento) y sube el
     // archivo ahí. Límite generoso pero evita subidas descontroladas.
     [HttpPost("{id:int}/drive-files")]
     [RequestSizeLimit(50_000_000)]
-    public async Task<ActionResult<DriveFileDto>> UploadDriveFile(int id, IFormFile file)
+    public async Task<ActionResult<DriveFileDto>> UploadDriveFile(int id, IFormFile file, [FromForm] string? documentType)
     {
         if (!await _drive.IsReadyAsync())
             return Problem("La integración con Google Drive no está configurada.", statusCode: StatusCodes.Status503ServiceUnavailable);
 
         if (file is null || file.Length == 0)
             return BadRequest(new { message = "Archivo requerido" });
+
+        // El frontend ya deshabilita el botón hasta elegir el tipo; se
+        // repite la validación acá para no depender solo de eso.
+        if (string.IsNullOrWhiteSpace(documentType))
+            return BadRequest(new { message = "Tipo de documento requerido" });
 
         var entity = await FindCase(id);
         if (entity is null) return NotFound();
@@ -298,14 +303,30 @@ public class CasesController : ControllerBase
             await EnsureDriveFolderAsync(entity);
 
             await using var stream = file.OpenReadStream();
-            var uploaded = await _drive.UploadFileAsync(entity.DriveFolderId!, file.FileName, file.ContentType, stream);
+            var uploaded = await _drive.UploadFileAsync(entity.DriveFolderId!, file.FileName, file.ContentType, stream, documentType);
 
-            return Ok(new DriveFileDto(uploaded.Id, uploaded.Name, uploaded.MimeType, uploaded.WebViewLink, uploaded.CreatedAt, uploaded.Size));
+            return Ok(new DriveFileDto(uploaded.Id, uploaded.Name, uploaded.MimeType, uploaded.WebViewLink, uploaded.CreatedAt, uploaded.Size, uploaded.DocumentType));
         }
         catch (InvalidOperationException ex)
         {
             return Problem(ex.Message, statusCode: StatusCodes.Status503ServiceUnavailable);
         }
+    }
+
+    // Solo un admin puede borrar documentos (se manda a la papelera de
+    // Drive, no se destruye de una).
+    [HttpDelete("{id:int}/drive-files/{fileId}")]
+    [Authorize(Roles = "r-admin")]
+    public async Task<IActionResult> DeleteDriveFile(int id, string fileId)
+    {
+        if (!await _drive.IsReadyAsync())
+            return Problem("La integración con Google Drive no está configurada.", statusCode: StatusCodes.Status503ServiceUnavailable);
+
+        var entity = await FindCase(id);
+        if (entity is null || string.IsNullOrWhiteSpace(entity.DriveFolderId)) return NotFound();
+
+        await _drive.TrashFileAsync(fileId);
+        return NoContent();
     }
 
     private async Task EnsureDriveFolderAsync(Case entity)
@@ -314,8 +335,23 @@ public class CasesController : ControllerBase
 
         var defendant = entity.Parties.FirstOrDefault(p => p.ProcessRole == "DEMANDADO");
         var defendantName = defendant?.Person?.Split('|').FirstOrDefault()?.Trim();
-        var label = !string.IsNullOrWhiteSpace(entity.Process.Radicado) ? entity.Process.Radicado : $"Caso-{entity.Id}";
-        var folderName = string.IsNullOrWhiteSpace(defendantName) ? label : $"{label} - {defendantName}";
+
+        // "#<N° de carpeta> . <nombre del demandado>" cuando el caso tiene
+        // número de carpeta asignado (siempre, para casos creados desde la
+        // app); si no lo tiene (ej. casos importados antes de este campo),
+        // se cae al criterio anterior basado en el radicado.
+        string folderName;
+        if (!string.IsNullOrWhiteSpace(entity.FolderNumber))
+        {
+            folderName = string.IsNullOrWhiteSpace(defendantName)
+                ? $"#{entity.FolderNumber}"
+                : $"#{entity.FolderNumber} . {defendantName}";
+        }
+        else
+        {
+            var label = !string.IsNullOrWhiteSpace(entity.Process.Radicado) ? entity.Process.Radicado : $"Caso-{entity.Id}";
+            folderName = string.IsNullOrWhiteSpace(defendantName) ? label : $"{label} - {defendantName}";
+        }
 
         entity.DriveFolderId = await _drive.CreateCaseFolderAsync(folderName);
         await _db.SaveChangesAsync();
@@ -415,6 +451,7 @@ public class CasesController : ControllerBase
     private static Case BuildEntity(CreateCaseRequest req) => new()
     {
         DemandanteRoleId = req.DemandanteRoleId,
+        FolderNumber = req.FolderNumber?.Trim(),
         Process = MapProcess(req.Process),
         FinancialInfo = MapFinancial(req.FinancialInfo),
         Measures = MapMeasures(req.Measures),
@@ -455,7 +492,7 @@ public class CasesController : ControllerBase
     };
 
     private static CaseFinancial? MapFinancial(FinancialInfoDto? d) =>
-        d is null ? null : new() { Capital = d.Capital, Obligations = d.Obligations?.Trim(), FngFag = d.FngFag };
+        d is null ? null : new() { Capital = d.Capital, Obligations = d.Obligations?.Trim(), FngFag = d.FngFag, PaymentAgreement = d.PaymentAgreement, PortfolioSale = d.PortfolioSale };
 
     private static CaseMeasures? MapMeasures(MeasuresInfoDto? d) =>
         d is null ? null : new() { Embargo = d.Embargo, EmbargoDate = d.EmbargoDate, RemanentEmbargo = d.RemanentEmbargo, RemanentEntity = d.RemanentEntity?.Trim() };
@@ -476,11 +513,12 @@ public class CasesController : ControllerBase
         c.CreatedAt.ToString("yyyy-MM-dd"),
         c.DemandanteRoleId,
         c.DemandanteRole?.Name,
+        c.FolderNumber,
         c.DriveFolderId,
         c.DriveFolderId is null ? null : DriveFolderUrl(c.DriveFolderId),
         new ProcessInfoDto(c.Process.Radicado, c.Process.ProcessType, c.Process.Court, c.Process.City, c.Process.FiledAt),
         c.Parties.Select(p => new PartyInfoDto(p.Person, p.ProcessRole)).ToList(),
-        c.FinancialInfo is null ? null : new FinancialInfoDto(c.FinancialInfo.Capital, c.FinancialInfo.Obligations, c.FinancialInfo.FngFag),
+        c.FinancialInfo is null ? null : new FinancialInfoDto(c.FinancialInfo.Capital, c.FinancialInfo.Obligations, c.FinancialInfo.FngFag, c.FinancialInfo.PaymentAgreement, c.FinancialInfo.PortfolioSale),
         c.Measures is null ? null : new MeasuresInfoDto(c.Measures.Embargo, c.Measures.EmbargoDate, c.Measures.RemanentEmbargo, c.Measures.RemanentEntity),
         c.Stages is null ? null : new StagesInfoDto(c.Stages.PaymentOrder, c.Stages.PersonalNotification, c.Stages.PersonalNotificationDate, c.Stages.FirstInstanceSentence, c.Stages.FirstInstanceDate, c.Stages.SecondInstance, c.Stages.SecondInstanceDate),
         c.Auction is null ? null : new AuctionInfoDto(c.Auction.AppraisalStatus, c.Auction.AppraisalDate, c.Auction.AppraisalValue, c.Auction.AuctionStatus, c.Auction.AuctionDate, c.Auction.Awarded, c.Auction.AwardDate),

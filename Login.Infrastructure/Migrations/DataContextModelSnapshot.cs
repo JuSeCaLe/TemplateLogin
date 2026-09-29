@@ -170,6 +170,9 @@ namespace Login.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("varchar(200)");
 
+                    b.Property<string>("FolderNumber")
+                        .HasColumnType("longtext");
+
                     b.HasKey("Id");
 
                     b.HasIndex("DemandanteRoleId");
@@ -706,6 +709,12 @@ namespace Login.Infrastructure.Migrations
                             b1.Property<string>("Obligations")
                                 .HasMaxLength(500)
                                 .HasColumnType("varchar(500)");
+
+                            b1.Property<bool>("PaymentAgreement")
+                                .HasColumnType("tinyint(1)");
+
+                            b1.Property<bool>("PortfolioSale")
+                                .HasColumnType("tinyint(1)");
 
                             b1.HasKey("CaseId");
 
