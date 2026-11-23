@@ -150,9 +150,20 @@ app.MapControllers();
 // toma el control. Si no hay wwwroot poblado, MapFallbackToFile no interfiere.
 app.MapFallbackToFile("index.html");
 
-using (var scope = app.Services.CreateScope())
+// Migraciones y seed corren DESPUÉS de que el host ya le avisó "Running" a
+// Windows (ApplicationStarted), no antes de app.Run() como estaba antes. Si
+// esto corre antes y se demora (antivirus escaneando el publish
+// self-contained la primera vez que arranca, latencia a la base remota,
+// etc.), el Service Control Manager mata el servicio con el error 1053
+// ("no respondió a tiempo") — el límite por defecto son ~30s, y ya pasó en
+// instalaciones reales en varios equipos.
+app.Lifetime.ApplicationStarted.Register(() => _ = RunStartupTasksAsync(app.Services));
+
+app.Run();
+
+static async Task RunStartupTasksAsync(IServiceProvider services)
 {
-    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    using var scope = services.CreateScope();
 
     try
     {
@@ -349,9 +360,14 @@ using (var scope = app.Services.CreateScope())
 
         await CatalogSeeder.SeedAsync(db);
 
-        // Plantillas de memoriales (.docx con placeholders) — ver
-        // Templates/Memoriales y MemorialGenerationService.
-        (string FileName, string Name)[] memorialTemplates =
+        // Plantillas de memoriales heredadas de antes del módulo admin
+        // (Templates/Memoriales + MemorialGenerationService): se siembran o
+        // se les completa el contenido en BD una sola vez, leyendo el
+        // archivo del disco. De acá en adelante, crear/reemplazar plantillas
+        // se hace desde el módulo admin (MemorialTemplatesController), que
+        // guarda el .docx directo en la base de datos — no en esta carpeta.
+        var templatesDir = Path.Combine(AppContext.BaseDirectory, "Templates", "Memoriales");
+        (string FileName, string Name)[] legacyMemorialTemplates =
         [
             ("ACEPTA CURADURIA.docx", "Acepta curaduría"),
             ("APORTO AVALUO COMERCIAL.docx", "Aporto avalúo comercial"),
@@ -372,25 +388,55 @@ using (var scope = app.Services.CreateScope())
             ("TERMINACIÓN POR NORMALIZACIÓN.docx", "Terminación por normalización"),
         ];
 
-        foreach (var (fileName, name) in memorialTemplates)
+        foreach (var (fileName, name) in legacyMemorialTemplates)
         {
-            if (!await db.MemorialTemplates.AnyAsync(x => x.FileName == fileName))
+            var existing = await db.MemorialTemplates.FirstOrDefaultAsync(x => x.FileName == fileName);
+            var path = Path.Combine(templatesDir, fileName);
+            var hasFile = File.Exists(path);
+
+            if (existing is null)
             {
+                if (!hasFile) continue; // instalación nueva sin esa plantilla heredada, nada que sembrar
+
+                var content = await File.ReadAllBytesAsync(path);
                 db.MemorialTemplates.Add(new MemorialTemplate
                 {
                     Name = name,
                     FileName = fileName,
+                    Content = content,
+                    DetectedPlaceholders = string.Join(", ", MemorialGenerationService.ExtractPlaceholders(content)),
                     Active = true,
-                    CreatedAt = DateTime.UtcNow
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
                 });
+            }
+            else if ((existing.Content is null || existing.Content.Length == 0) && hasFile)
+            {
+                // Backfill: la fila ya existía (de una instalación anterior
+                // a este módulo) pero todavía sin el contenido en BD.
+                var content = await File.ReadAllBytesAsync(path);
+                existing.Content = content;
+                existing.DetectedPlaceholders = string.Join(", ", MemorialGenerationService.ExtractPlaceholders(content));
+                existing.UpdatedAt = DateTime.UtcNow;
             }
         }
         await db.SaveChangesAsync();
     }
     catch (Exception ex)
     {
-        Console.WriteLine($"Startup/seed error: {ex}");
+        // Para un servicio de Windows, Console.WriteLine no se ve en ningún
+        // lado (sin consola adjunta) — queda además en un archivo junto al
+        // ejecutable para poder diagnosticar sin tener que ir al Visor de
+        // eventos a adivinar.
+        var entry = $"[{DateTime.UtcNow:O}] Startup/seed error:{Environment.NewLine}{ex}{Environment.NewLine}{new string('-', 80)}{Environment.NewLine}";
+        Console.WriteLine(entry);
+        try
+        {
+            await File.AppendAllTextAsync(Path.Combine(AppContext.BaseDirectory, "startup-errors.log"), entry);
+        }
+        catch
+        {
+            // si ni el log se puede escribir, no hay más que hacer acá
+        }
     }
 }
-
-app.Run();

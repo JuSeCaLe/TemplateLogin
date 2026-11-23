@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO.Compression;
 using System.Linq.Expressions;
 using System.Security.Claims;
@@ -113,7 +114,13 @@ public class MemorialsController : ControllerBase
 
     // ── helpers ───────────────────────────────────────────────────────────
 
-    private static MemorialFieldValues BuildFieldValues(Case c)
+    // Catálogo de variables disponibles para [Corchetes] en las plantillas —
+    // documentado también en el módulo admin de plantillas para que quien
+    // las suba sepa qué nombres puede usar. Los nombres se comparan
+    // normalizados (ver MemorialGenerationService.NormalizeKey), así que
+    // mayúsculas/espacios/guion_bajo no importan: [TipoProceso] y
+    // [TIPO_PROCESO] son lo mismo.
+    private static Dictionary<string, string> BuildFieldValues(Case c)
     {
         var demandanteParty = c.Parties.FirstOrDefault(p => p.ProcessRole == "DEMANDANTE");
         var (demandanteName, _) = ParseParty(demandanteParty?.Person);
@@ -122,15 +129,28 @@ public class MemorialsController : ControllerBase
         var demandadoParty = c.Parties.FirstOrDefault(p => p.ProcessRole == "DEMANDADO");
         var (demandadoName, demandadoCedula) = ParseParty(demandadoParty?.Person);
 
-        return new MemorialFieldValues(
-            Juzgado: c.Process.Court ?? "",
-            Ciudad: c.Process.City ?? "",
-            TipoProceso: c.Process.ProcessType ?? "",
-            Demandante: demandante,
-            Demandado: demandadoName,
-            DemandadoCedula: demandadoCedula,
-            Radicado: c.Process.Radicado ?? ""
-        );
+        return new Dictionary<string, string>
+        {
+            ["Juzgado"] = c.Process.Court ?? "",
+            ["Ciudad"] = c.Process.City ?? "",
+            ["TipoProceso"] = c.Process.ProcessType ?? "",
+            ["Demandante"] = demandante,
+            ["Demandado"] = demandadoName,
+            ["DemandadoCedula"] = demandadoCedula,
+            ["Radicado"] = c.Process.Radicado ?? "",
+            ["NumeroCarpeta"] = c.FolderNumber ?? "",
+            ["FechaPresentacionDemanda"] = FormatDate(c.Process.FiledAt),
+            ["Capital"] = c.FinancialInfo?.Capital is decimal cap ? cap.ToString("N0", CultureInfo.GetCultureInfo("es-CO")) : "",
+            ["Obligaciones"] = c.FinancialInfo?.Obligations ?? "",
+            ["CasoId"] = c.Id.ToString(),
+            ["FechaHoy"] = DateTime.Now.ToString("dd/MM/yyyy"),
+        };
+    }
+
+    private static string FormatDate(string? isoDate)
+    {
+        if (string.IsNullOrWhiteSpace(isoDate)) return "";
+        return DateTime.TryParse(isoDate, out var d) ? d.ToString("dd/MM/yyyy") : isoDate;
     }
 
     // Mismo formato "Nombre|Tipo|Documento" que usa CasesController.ParseDefendant.

@@ -377,8 +377,15 @@ namespace Login.Infrastructure.Migrations
                     b.Property<bool>("Active")
                         .HasColumnType("tinyint(1)");
 
+                    b.Property<byte[]>("Content")
+                        .HasColumnType("longblob");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
+
+                    b.Property<string>("DetectedPlaceholders")
+                        .IsRequired()
+                        .HasColumnType("longtext");
 
                     b.Property<string>("FileName")
                         .IsRequired()
@@ -389,6 +396,9 @@ namespace Login.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("varchar(200)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
 
                     b.HasKey("Id");
 
